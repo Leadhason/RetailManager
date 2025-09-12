@@ -2,7 +2,12 @@ import jwt from "jsonwebtoken";
 import { type User } from "@shared/schema";
 import { storage } from "../storage";
 
-const JWT_SECRET = process.env.JWT_SECRET || process.env.SESSION_SECRET || "fallback_secret";
+// Validate JWT_SECRET exists - fail fast if missing
+if (!process.env.JWT_SECRET && !process.env.SESSION_SECRET) {
+  throw new Error("JWT_SECRET or SESSION_SECRET environment variable must be set for secure authentication");
+}
+
+const JWT_SECRET = process.env.JWT_SECRET || process.env.SESSION_SECRET!;
 
 export interface AuthToken {
   id: string;

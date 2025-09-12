@@ -6,9 +6,13 @@ import { EmailService } from "./services/email";
 import { 
   insertUserSchema, insertProductSchema, insertCategorySchema,
   insertCustomerSchema, insertOrderSchema, insertSupplierSchema,
-  insertInventorySchema, insertLocationSchema, insertEmailCampaignSchema
+  insertInventorySchema, insertLocationSchema, insertEmailCampaignSchema,
+  locations
 } from "@shared/schema";
 import { z } from "zod";
+import { drizzle } from "drizzle-orm/neon-http";
+import { neon } from "@neondatabase/serverless";
+import { eq, sql } from "drizzle-orm";
 
 // Middleware for authentication
 const authenticate = async (req: any, res: any, next: any) => {
@@ -83,14 +87,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ message: "Logout successful" });
   });
 
-  // Temporary registration endpoint for testing (remove in production)
-  app.post("/api/auth/register", async (req, res) => {
+  // Secured registration endpoint - requires super_admin authorization
+  app.post("/api/auth/register", authenticate, authorize("super_admin"), async (req, res) => {
     try {
       const userData = insertUserSchema.parse(req.body);
       
-      // For testing, allow creating admin users
+      // Prevent auto-assigning super_admin role unless explicitly set by existing super_admin
       if (!userData.role) {
-        userData.role = "super_admin";
+        userData.role = "staff";
       }
       
       const user = await storage.createUser(userData);
@@ -106,6 +110,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       });
     } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
       console.error("Registration error:", error);
       res.status(500).json({ message: "Registration failed" });
     }
@@ -161,6 +168,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       console.error("Create user error:", error);
       res.status(500).json({ message: "Failed to create user" });
+    }
+  });
+
+  app.put("/api/users/:id", authenticate, authorize("super_admin"), async (req, res) => {
+    try {
+      const updates = insertUserSchema.partial().parse(req.body);
+      const user = await storage.updateUser(req.params.id, updates);
+      
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      res.json({
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role,
+        isActive: user.isActive
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      console.error("Update user error:", error);
+      res.status(500).json({ message: "Failed to update user" });
+    }
+  });
+
+  app.delete("/api/users/:id", authenticate, authorize("super_admin"), async (req, res) => {
+    try {
+      const success = await storage.deleteUser(req.params.id);
+      if (!success) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      res.json({ message: "User deleted successfully" });
+    } catch (error) {
+      console.error("Delete user error:", error);
+      res.status(500).json({ message: "Failed to delete user" });
     }
   });
 
@@ -267,6 +313,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.put("/api/categories/:id", authenticate, authorize("staff"), async (req, res) => {
+    try {
+      const updates = insertCategorySchema.partial().parse(req.body);
+      const category = await storage.updateCategory(req.params.id, updates);
+      
+      if (!category) {
+        return res.status(404).json({ message: "Category not found" });
+      }
+      
+      res.json(category);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      console.error("Update category error:", error);
+      res.status(500).json({ message: "Failed to update category" });
+    }
+  });
+
+  app.delete("/api/categories/:id", authenticate, authorize("store_manager"), async (req, res) => {
+    try {
+      const success = await storage.deleteCategory(req.params.id);
+      if (!success) {
+        return res.status(404).json({ message: "Category not found" });
+      }
+      res.json({ message: "Category deleted successfully" });
+    } catch (error) {
+      console.error("Delete category error:", error);
+      res.status(500).json({ message: "Failed to delete category" });
+    }
+  });
+
   // Customer routes
   app.get("/api/customers", authenticate, async (req, res) => {
     try {
@@ -309,6 +387,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       console.error("Create customer error:", error);
       res.status(500).json({ message: "Failed to create customer" });
+    }
+  });
+
+  app.put("/api/customers/:id", authenticate, authorize("staff"), async (req, res) => {
+    try {
+      const updates = insertCustomerSchema.partial().parse(req.body);
+      const customer = await storage.updateCustomer(req.params.id, updates);
+      
+      if (!customer) {
+        return res.status(404).json({ message: "Customer not found" });
+      }
+      
+      res.json(customer);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      console.error("Update customer error:", error);
+      res.status(500).json({ message: "Failed to update customer" });
+    }
+  });
+
+  app.delete("/api/customers/:id", authenticate, authorize("store_manager"), async (req, res) => {
+    try {
+      const success = await storage.deleteCustomer(req.params.id);
+      if (!success) {
+        return res.status(404).json({ message: "Customer not found" });
+      }
+      res.json({ message: "Customer deleted successfully" });
+    } catch (error) {
+      console.error("Delete customer error:", error);
+      res.status(500).json({ message: "Failed to delete customer" });
     }
   });
 
@@ -369,7 +479,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/orders/:id/status", authenticate, authorize("staff"), async (req, res) => {
+  app.put("/api/orders/:id/status", authenticate, authorize("staff"), async (req: any, res) => {
     try {
       const { status, comment } = req.body;
       const success = await storage.updateOrderStatus(
@@ -387,6 +497,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Update order status error:", error);
       res.status(500).json({ message: "Failed to update order status" });
+    }
+  });
+
+  app.delete("/api/orders/:id", authenticate, authorize("store_manager"), async (req: any, res) => {
+    try {
+      // Cancel order by updating status to 'cancelled'
+      const success = await storage.updateOrderStatus(
+        req.params.id, 
+        "cancelled", 
+        "Order cancelled by administrator", 
+        req.user.id
+      );
+      
+      if (!success) {
+        return res.status(404).json({ message: "Order not found" });
+      }
+      
+      res.json({ message: "Order cancelled successfully" });
+    } catch (error) {
+      console.error("Cancel order error:", error);
+      res.status(500).json({ message: "Failed to cancel order" });
     }
   });
 
@@ -412,6 +543,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       console.error("Create supplier error:", error);
       res.status(500).json({ message: "Failed to create supplier" });
+    }
+  });
+
+  app.put("/api/suppliers/:id", authenticate, authorize("staff"), async (req, res) => {
+    try {
+      const updates = insertSupplierSchema.partial().parse(req.body);
+      const supplier = await storage.updateSupplier(req.params.id, updates);
+      
+      if (!supplier) {
+        return res.status(404).json({ message: "Supplier not found" });
+      }
+      
+      res.json(supplier);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      console.error("Update supplier error:", error);
+      res.status(500).json({ message: "Failed to update supplier" });
+    }
+  });
+
+  app.delete("/api/suppliers/:id", authenticate, authorize("store_manager"), async (req, res) => {
+    try {
+      const success = await storage.deleteSupplier(req.params.id);
+      if (!success) {
+        return res.status(404).json({ message: "Supplier not found" });
+      }
+      res.json({ message: "Supplier deleted successfully" });
+    } catch (error) {
+      console.error("Delete supplier error:", error);
+      res.status(500).json({ message: "Failed to delete supplier" });
     }
   });
 
@@ -486,6 +649,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.delete("/api/locations/:id", authenticate, authorize("store_manager"), async (req, res) => {
+    try {
+      // Use the database instance from storage for consistency
+      const db = drizzle(neon(process.env.DATABASE_URL!));
+      
+      // Soft delete by setting isActive to false
+      const success = await db.update(locations)
+        .set({ isActive: false })
+        .where(eq(locations.id, req.params.id));
+      
+      if (success.rowCount === 0) {
+        return res.status(404).json({ message: "Location not found" });
+      }
+      
+      res.json({ message: "Location deleted successfully" });
+    } catch (error) {
+      console.error("Delete location error:", error);
+      res.status(500).json({ message: "Failed to delete location" });
+    }
+  });
+
   // Email campaign routes
   app.get("/api/email-campaigns", authenticate, authorize("staff"), async (req, res) => {
     try {
@@ -497,7 +681,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/email-campaigns", authenticate, authorize("staff"), async (req, res) => {
+  app.post("/api/email-campaigns", authenticate, authorize("staff"), async (req: any, res) => {
     try {
       const campaignData = insertEmailCampaignSchema.parse({
         ...req.body,
@@ -511,6 +695,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       console.error("Create email campaign error:", error);
       res.status(500).json({ message: "Failed to create email campaign" });
+    }
+  });
+
+  app.put("/api/email-campaigns/:id", authenticate, authorize("staff"), async (req, res) => {
+    try {
+      const updates = insertEmailCampaignSchema.partial().parse(req.body);
+      const campaign = await storage.updateEmailCampaign(req.params.id, updates);
+      
+      if (!campaign) {
+        return res.status(404).json({ message: "Email campaign not found" });
+      }
+      
+      res.json(campaign);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      console.error("Update email campaign error:", error);
+      res.status(500).json({ message: "Failed to update email campaign" });
     }
   });
 
