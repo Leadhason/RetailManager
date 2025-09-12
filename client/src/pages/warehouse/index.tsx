@@ -16,10 +16,10 @@ import InventoryTable from "@/components/warehouse/inventory-table";
 import StockAlerts from "@/components/warehouse/stock-alerts";
 
 export default function WarehouseIndex() {
-  const [selectedLocation, setSelectedLocation] = useState<string>("");
+  const [selectedLocation, setSelectedLocation] = useState<string>("all");
   const [activeTab, setActiveTab] = useState("inventory");
   
-  const { data: inventory = [], isLoading: inventoryLoading, error: inventoryError } = useInventory(selectedLocation);
+  const { data: inventory = [], isLoading: inventoryLoading, error: inventoryError } = useInventory(selectedLocation === "all" ? "" : selectedLocation);
   const { data: lowStockItems = [], isLoading: lowStockLoading } = useLowStockItems(10);
   const { data: locations = [], isLoading: locationsLoading } = useLocations();
   const { data: inventoryMetrics, isLoading: metricsLoading } = useInventoryMetrics();
@@ -38,7 +38,7 @@ export default function WarehouseIndex() {
     quantityAvailable: item.quantityOnHand - item.quantityReserved,
     reorderLevel: item.reorderLevel || 10,
     reorderQuantity: item.reorderQuantity || 50,
-    lastCountedAt: item.lastCountedAt
+    lastCountedAt: item.lastCountedAt ? item.lastCountedAt.toISOString() : null
   }));
 
   // Transform low stock items for alerts component
@@ -134,7 +134,7 @@ export default function WarehouseIndex() {
               <SelectValue placeholder="All Locations" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All Locations</SelectItem>
+              <SelectItem value="all">All Locations</SelectItem>
               {locations.map((location) => (
                 <SelectItem key={location.id} value={location.id}>
                   {location.name}

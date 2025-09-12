@@ -16,11 +16,11 @@ export default function AnalyticsIndex() {
     from: new Date(new Date().setDate(new Date().getDate() - 30)),
     to: new Date()
   });
-  const [selectedProduct, setSelectedProduct] = useState<string>("");
+  const [selectedProduct, setSelectedProduct] = useState<string>("all");
   
   const { data: analyticsData, isLoading: analyticsLoading, error: analyticsError, refetch: refetchAnalytics } = useAnalytics(dateRange);
   const { data: salesMetrics, isLoading: salesLoading, error: salesError, refetch: refetchSales } = useSalesMetrics();
-  const { data: productAnalytics, isLoading: productLoading, error: productError } = useProductAnalytics(selectedProduct);
+  const { data: productAnalytics, isLoading: productLoading, error: productError } = useProductAnalytics(selectedProduct === "all" ? "" : selectedProduct);
   const { toast } = useToast();
 
   const handleExportData = () => {
@@ -177,7 +177,7 @@ export default function AnalyticsIndex() {
                 <SelectValue placeholder="All Products" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Products</SelectItem>
+                <SelectItem value="all">All Products</SelectItem>
                 <SelectItem value="1">Professional Drill Set</SelectItem>
                 <SelectItem value="2">LED Work Light</SelectItem>
                 <SelectItem value="3">Safety Equipment Kit</SelectItem>

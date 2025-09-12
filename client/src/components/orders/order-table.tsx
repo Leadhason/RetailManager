@@ -166,17 +166,17 @@ export default function OrderTable({
                     {Number(order.totalAmount).toFixed(2)}
                   </TableCell>
                   <TableCell>
-                    <Badge className={getStatusColor(order.status)}>
-                      {order.status}
+                    <Badge className={getStatusColor(order.status || 'pending')}>
+                      {order.status || 'pending'}
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <Badge className={getPaymentStatusColor(order.paymentStatus)}>
-                      {order.paymentStatus}
+                    <Badge className={getPaymentStatusColor(order.paymentStatus || 'pending')}>
+                      {order.paymentStatus || 'pending'}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    {new Date(order.createdAt).toLocaleDateString()}
+                    {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : 'N/A'}
                   </TableCell>
                   <TableCell>
                     <DropdownMenu>
