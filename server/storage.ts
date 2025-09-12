@@ -14,10 +14,12 @@ import {
   type Location, type InsertLocation,
   type EmailCampaign, type InsertEmailCampaign,
   type PurchaseOrder, type InsertPurchaseOrder,
+  type InventoryMovement, type InsertInventoryMovement,
+  type ReorderRule, type InsertReorderRule,
   type DashboardMetrics,
   users, products, categories, customers, orders, orderItems,
   suppliers, inventory, locations, emailCampaigns, purchaseOrders,
-  orderStatusHistory, customerInteractions
+  inventoryMovements, reorderRules, orderStatusHistory, customerInteractions
 } from "@shared/schema";
 
 if (!process.env.DATABASE_URL) {
@@ -107,6 +109,45 @@ export interface IStorage {
   getProductInventory(productId: string): Promise<Inventory[]>;
   updateInventory(productId: string, locationId: string, updates: Partial<InsertInventory>): Promise<Inventory | undefined>;
   getLowStockItems(threshold?: number): Promise<Inventory[]>;
+
+  // Inventory movements for audit trail
+  getInventoryMovements(productId?: string, locationId?: string, limit?: number): Promise<InventoryMovement[]>;
+  createInventoryMovement(movement: InsertInventoryMovement): Promise<InventoryMovement>;
+  adjustStock(productId: string, locationId: string, quantity: number, reason: string, userId?: string): Promise<boolean>;
+
+  // Reorder rules management
+  getReorderRules(productId?: string, locationId?: string): Promise<ReorderRule[]>;
+  createReorderRule(rule: InsertReorderRule): Promise<ReorderRule>;
+  updateReorderRule(id: string, updates: Partial<InsertReorderRule>): Promise<ReorderRule | undefined>;
+  deleteReorderRule(id: string): Promise<boolean>;
+
+  // Advanced inventory features
+  getReorderSuggestions(): Promise<Array<{
+    productId: string;
+    productName: string;
+    sku: string;
+    currentStock: number;
+    suggestedQuantity: number;
+    priority: 'low' | 'medium' | 'high';
+    reason: string;
+    supplierId?: string;
+    supplierName?: string;
+  }>>;
+  
+  // Bulk operations
+  bulkImportProducts(products: InsertProduct[]): Promise<{ success: number; errors: Array<{ row: number; error: string }> }>;
+  bulkImportInventory(inventoryItems: Array<{ sku: string; locationCode: string; quantity: number; }>): Promise<{ success: number; errors: Array<{ row: number; error: string }> }>;
+  exportInventoryData(locationId?: string): Promise<Array<{
+    sku: string;
+    productName: string;
+    categoryName: string;
+    locationName: string;
+    quantityOnHand: number;
+    quantityReserved: number;
+    reorderLevel: number;
+    costPrice: number;
+    sellingPrice: number;
+  }>>;
 
   // Location management
   getLocations(): Promise<Location[]>;
@@ -502,6 +543,274 @@ export class DatabaseStorage implements IStorage {
   async getLowStockItems(threshold = 10): Promise<Inventory[]> {
     return await db.select().from(inventory)
       .where(sql`(${inventory.quantityOnHand} - ${inventory.quantityReserved}) <= ${threshold}`);
+  }
+
+  // Inventory movements for audit trail
+  async getInventoryMovements(productId?: string, locationId?: string, limit?: number): Promise<InventoryMovement[]> {
+    const conditions = [];
+    
+    if (productId) {
+      conditions.push(eq(inventoryMovements.productId, productId));
+    }
+    if (locationId) {
+      conditions.push(eq(inventoryMovements.locationId, locationId));
+    }
+    
+    let query = db.select().from(inventoryMovements);
+    
+    if (conditions.length > 0) {
+      query = query.where(conditions.length === 1 ? conditions[0] : and(...conditions));
+    }
+    
+    query = query.orderBy(desc(inventoryMovements.createdAt));
+    
+    if (limit) {
+      query = query.limit(limit);
+    }
+    
+    return await query;
+  }
+
+  async createInventoryMovement(movement: InsertInventoryMovement): Promise<InventoryMovement> {
+    const result = await db.insert(inventoryMovements).values(movement).returning();
+    return result[0];
+  }
+
+  async adjustStock(productId: string, locationId: string, quantity: number, reason: string, userId?: string): Promise<boolean> {
+    try {
+      // Atomic stock adjustment with audit trail using CTE (Common Table Expression)
+      const result = await db.execute(sql`
+        WITH stock_update AS (
+          UPDATE inventory 
+          SET 
+            quantity_on_hand = GREATEST(0, quantity_on_hand + ${quantity}),
+            updated_at = CURRENT_TIMESTAMP
+          WHERE product_id = ${productId} AND location_id = ${locationId}
+          RETURNING 
+            product_id,
+            location_id,
+            LAG(quantity_on_hand) OVER() as previous_quantity,
+            quantity_on_hand as new_quantity
+        ),
+        movement_insert AS (
+          INSERT INTO inventory_movements (
+            product_id, location_id, type, quantity, 
+            previous_quantity, new_quantity, reason, performed_by
+          )
+          SELECT 
+            product_id, location_id, 'adjustment', ${quantity},
+            COALESCE(previous_quantity, 0), new_quantity, ${reason}, ${userId}
+          FROM stock_update
+          RETURNING id
+        )
+        SELECT 
+          (SELECT COUNT(*) FROM stock_update) as updated_rows,
+          (SELECT COUNT(*) FROM movement_insert) as movement_rows
+      `);
+
+      const updateResult = result.rows[0] as { updated_rows: number; movement_rows: number };
+      
+      if (updateResult.updated_rows === 0) {
+        throw new Error('Inventory record not found or not updated');
+      }
+      
+      return updateResult.updated_rows > 0 && updateResult.movement_rows > 0;
+    } catch (error) {
+      console.error('Error adjusting stock:', error);
+      return false;
+    }
+  }
+
+  // Reorder rules management
+  async getReorderRules(productId?: string, locationId?: string): Promise<ReorderRule[]> {
+    const conditions = [eq(reorderRules.isActive, true)];
+    
+    if (productId) {
+      conditions.push(eq(reorderRules.productId, productId));
+    }
+    if (locationId) {
+      conditions.push(eq(reorderRules.locationId, locationId));
+    }
+    
+    return await db.select().from(reorderRules).where(and(...conditions));
+  }
+
+  async createReorderRule(rule: InsertReorderRule): Promise<ReorderRule> {
+    const result = await db.insert(reorderRules).values(rule).returning();
+    return result[0];
+  }
+
+  async updateReorderRule(id: string, updates: Partial<InsertReorderRule>): Promise<ReorderRule | undefined> {
+    const result = await db.update(reorderRules)
+      .set({ ...updates, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(eq(reorderRules.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteReorderRule(id: string): Promise<boolean> {
+    const result = await db.delete(reorderRules).where(eq(reorderRules.id, id)).returning();
+    return result.length > 0;
+  }
+
+  // Advanced inventory features
+  async getReorderSuggestions(): Promise<Array<{
+    productId: string;
+    productName: string;
+    sku: string;
+    currentStock: number;
+    suggestedQuantity: number;
+    priority: 'low' | 'medium' | 'high';
+    reason: string;
+    supplierId?: string;
+    supplierName?: string;
+  }>> {
+    // Get products that are below reorder level
+    const lowStockQuery = await db.select({
+      productId: inventory.productId,
+      productName: products.name,
+      sku: products.sku,
+      currentStock: sql`(${inventory.quantityOnHand} - ${inventory.quantityReserved})`.as('currentStock'),
+      reorderLevel: inventory.reorderLevel,
+      reorderQuantity: inventory.reorderQuantity,
+      supplierId: products.supplierId,
+      supplierName: suppliers.name
+    })
+    .from(inventory)
+    .innerJoin(products, eq(inventory.productId, products.id))
+    .leftJoin(suppliers, eq(products.supplierId, suppliers.id))
+    .where(sql`(${inventory.quantityOnHand} - ${inventory.quantityReserved}) <= ${inventory.reorderLevel}`);
+
+    return lowStockQuery.map(item => ({
+      productId: item.productId,
+      productName: item.productName,
+      sku: item.sku || '',
+      currentStock: Number(item.currentStock),
+      suggestedQuantity: item.reorderQuantity || 50,
+      priority: (Number(item.currentStock) === 0 ? 'high' : 
+               Number(item.currentStock) <= (item.reorderLevel || 0) / 2 ? 'medium' : 'low') as 'low' | 'medium' | 'high',
+      reason: Number(item.currentStock) === 0 ? 'Out of stock' : 'Below reorder level',
+      supplierId: item.supplierId || undefined,
+      supplierName: item.supplierName || undefined
+    }));
+  }
+
+  // Bulk operations
+  async bulkImportProducts(productList: InsertProduct[]): Promise<{ success: number; errors: Array<{ row: number; error: string }> }> {
+    const results = { success: 0, errors: [] as Array<{ row: number; error: string }> };
+    
+    for (let i = 0; i < productList.length; i++) {
+      try {
+        await db.insert(products).values(productList[i]);
+        results.success++;
+      } catch (error: any) {
+        results.errors.push({ row: i + 1, error: error.message });
+      }
+    }
+    
+    return results;
+  }
+
+  async bulkImportInventory(inventoryItems: Array<{ sku: string; locationCode: string; quantity: number; }>): Promise<{ success: number; errors: Array<{ row: number; error: string }> }> {
+    const results = { success: 0, errors: [] as Array<{ row: number; error: string }> };
+    
+    for (let i = 0; i < inventoryItems.length; i++) {
+      try {
+        const item = inventoryItems[i];
+        
+        // Find product by SKU
+        const product = await db.select({ id: products.id })
+          .from(products)
+          .where(eq(products.sku, item.sku))
+          .limit(1);
+        
+        if (!product.length) {
+          results.errors.push({ row: i + 1, error: `Product with SKU ${item.sku} not found` });
+          continue;
+        }
+
+        // Find location by code
+        const location = await db.select({ id: locations.id })
+          .from(locations)
+          .where(eq(locations.code, item.locationCode))
+          .limit(1);
+        
+        if (!location.length) {
+          results.errors.push({ row: i + 1, error: `Location with code ${item.locationCode} not found` });
+          continue;
+        }
+
+        // Update or create inventory record
+        const existing = await db.select()
+          .from(inventory)
+          .where(and(eq(inventory.productId, product[0].id), eq(inventory.locationId, location[0].id)))
+          .limit(1);
+
+        if (existing.length) {
+          await db.update(inventory)
+            .set({ quantityOnHand: item.quantity, updatedAt: sql`CURRENT_TIMESTAMP` })
+            .where(and(eq(inventory.productId, product[0].id), eq(inventory.locationId, location[0].id)));
+        } else {
+          await db.insert(inventory).values({
+            productId: product[0].id,
+            locationId: location[0].id,
+            quantityOnHand: item.quantity
+          });
+        }
+        
+        results.success++;
+      } catch (error: any) {
+        results.errors.push({ row: i + 1, error: error.message });
+      }
+    }
+    
+    return results;
+  }
+
+  async exportInventoryData(locationId?: string): Promise<Array<{
+    sku: string;
+    productName: string;
+    categoryName: string;
+    locationName: string;
+    quantityOnHand: number;
+    quantityReserved: number;
+    reorderLevel: number;
+    costPrice: number;
+    sellingPrice: number;
+  }>> {
+    let query = db.select({
+      sku: products.sku,
+      productName: products.name,
+      categoryName: categories.name,
+      locationName: locations.name,
+      quantityOnHand: inventory.quantityOnHand,
+      quantityReserved: inventory.quantityReserved,
+      reorderLevel: inventory.reorderLevel,
+      costPrice: products.costPrice,
+      sellingPrice: products.sellingPrice
+    })
+    .from(inventory)
+    .innerJoin(products, eq(inventory.productId, products.id))
+    .innerJoin(locations, eq(inventory.locationId, locations.id))
+    .leftJoin(categories, eq(products.categoryId, categories.id));
+
+    if (locationId) {
+      query = query.where(eq(inventory.locationId, locationId));
+    }
+
+    const result = await query;
+    
+    return result.map(item => ({
+      sku: item.sku || '',
+      productName: item.productName,
+      categoryName: item.categoryName || '',
+      locationName: item.locationName,
+      quantityOnHand: item.quantityOnHand,
+      quantityReserved: item.quantityReserved,
+      reorderLevel: item.reorderLevel || 0,
+      costPrice: Number(item.costPrice || 0),
+      sellingPrice: Number(item.sellingPrice || 0)
+    }));
   }
 
   // Location management

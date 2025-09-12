@@ -7,6 +7,7 @@ import {
   insertUserSchema, insertProductSchema, insertCategorySchema,
   insertCustomerSchema, insertOrderSchema, insertSupplierSchema,
   insertInventorySchema, insertLocationSchema, insertEmailCampaignSchema,
+  insertInventoryMovementSchema, insertReorderRuleSchema,
   locations
 } from "@shared/schema";
 import { z } from "zod";
@@ -621,6 +622,178 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       console.error("Update inventory error:", error);
       res.status(500).json({ message: "Failed to update inventory" });
+    }
+  });
+
+  // Advanced Inventory Management Routes
+
+  // Inventory movements (audit trail)
+  app.get("/api/inventory/movements", authenticate, async (req, res) => {
+    try {
+      const { productId, locationId, limit = 100 } = req.query;
+      const movements = await storage.getInventoryMovements(
+        productId as string, 
+        locationId as string, 
+        Number(limit)
+      );
+      res.json(movements);
+    } catch (error) {
+      console.error("Get inventory movements error:", error);
+      res.status(500).json({ message: "Failed to fetch inventory movements" });
+    }
+  });
+
+  // Stock adjustments
+  app.post("/api/inventory/adjust", authenticate, authorize("staff"), async (req, res) => {
+    try {
+      const { productId, locationId, quantity, reason } = req.body;
+      
+      if (!productId || !locationId || quantity === undefined || !reason) {
+        return res.status(400).json({ 
+          message: "Product ID, location ID, quantity, and reason are required" 
+        });
+      }
+
+      const success = await storage.adjustStock(
+        productId, 
+        locationId, 
+        Number(quantity), 
+        reason, 
+        (req as any).user.id
+      );
+
+      if (!success) {
+        return res.status(400).json({ message: "Failed to adjust stock" });
+      }
+
+      res.json({ message: "Stock adjusted successfully" });
+    } catch (error) {
+      console.error("Stock adjustment error:", error);
+      res.status(500).json({ message: "Failed to adjust stock" });
+    }
+  });
+
+  // Reorder rules CRUD
+  app.get("/api/inventory/reorder-rules", authenticate, async (req, res) => {
+    try {
+      const { productId, locationId } = req.query;
+      const rules = await storage.getReorderRules(productId as string, locationId as string);
+      res.json(rules);
+    } catch (error) {
+      console.error("Get reorder rules error:", error);
+      res.status(500).json({ message: "Failed to fetch reorder rules" });
+    }
+  });
+
+  app.post("/api/inventory/reorder-rules", authenticate, authorize("store_manager"), async (req, res) => {
+    try {
+      const ruleData = insertReorderRuleSchema.parse(req.body);
+      const rule = await storage.createReorderRule(ruleData);
+      res.status(201).json(rule);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      console.error("Create reorder rule error:", error);
+      res.status(500).json({ message: "Failed to create reorder rule" });
+    }
+  });
+
+  app.put("/api/inventory/reorder-rules/:id", authenticate, authorize("store_manager"), async (req, res) => {
+    try {
+      const updates = insertReorderRuleSchema.partial().parse(req.body);
+      const rule = await storage.updateReorderRule(req.params.id, updates);
+      
+      if (!rule) {
+        return res.status(404).json({ message: "Reorder rule not found" });
+      }
+      
+      res.json(rule);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      console.error("Update reorder rule error:", error);
+      res.status(500).json({ message: "Failed to update reorder rule" });
+    }
+  });
+
+  app.delete("/api/inventory/reorder-rules/:id", authenticate, authorize("store_manager"), async (req, res) => {
+    try {
+      const success = await storage.deleteReorderRule(req.params.id);
+      if (!success) {
+        return res.status(404).json({ message: "Reorder rule not found" });
+      }
+      res.json({ message: "Reorder rule deleted successfully" });
+    } catch (error) {
+      console.error("Delete reorder rule error:", error);
+      res.status(500).json({ message: "Failed to delete reorder rule" });
+    }
+  });
+
+  // Reorder suggestions
+  app.get("/api/inventory/reorder-suggestions", authenticate, async (req, res) => {
+    try {
+      const suggestions = await storage.getReorderSuggestions();
+      res.json(suggestions);
+    } catch (error) {
+      console.error("Get reorder suggestions error:", error);
+      res.status(500).json({ message: "Failed to fetch reorder suggestions" });
+    }
+  });
+
+  // Bulk operations
+  app.post("/api/inventory/bulk-import/products", authenticate, authorize("store_manager"), async (req, res) => {
+    try {
+      const { products } = req.body;
+      
+      if (!Array.isArray(products)) {
+        return res.status(400).json({ message: "Products array is required" });
+      }
+
+      const result = await storage.bulkImportProducts(products);
+      res.json({
+        message: `Imported ${result.success} products successfully`,
+        success: result.success,
+        errors: result.errors
+      });
+    } catch (error) {
+      console.error("Bulk import products error:", error);
+      res.status(500).json({ message: "Failed to import products" });
+    }
+  });
+
+  app.post("/api/inventory/bulk-import/inventory", authenticate, authorize("store_manager"), async (req, res) => {
+    try {
+      const { inventoryItems } = req.body;
+      
+      if (!Array.isArray(inventoryItems)) {
+        return res.status(400).json({ message: "Inventory items array is required" });
+      }
+
+      const result = await storage.bulkImportInventory(inventoryItems);
+      res.json({
+        message: `Imported ${result.success} inventory items successfully`,
+        success: result.success,
+        errors: result.errors
+      });
+    } catch (error) {
+      console.error("Bulk import inventory error:", error);
+      res.status(500).json({ message: "Failed to import inventory" });
+    }
+  });
+
+  app.get("/api/inventory/export", authenticate, async (req, res) => {
+    try {
+      const { locationId } = req.query;
+      const data = await storage.exportInventoryData(locationId as string);
+      
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Content-Disposition', 'attachment; filename=inventory-export.json');
+      res.json(data);
+    } catch (error) {
+      console.error("Export inventory error:", error);
+      res.status(500).json({ message: "Failed to export inventory data" });
     }
   });
 

@@ -251,7 +251,7 @@ export default function PromotionsIndex() {
               {(newPromotion.type !== 'free-shipping' && newPromotion.type !== 'bogo') && (
                 <div>
                   <Label htmlFor="promo-value">
-                    {newPromotion.type === 'percentage' ? 'Percentage' : 'Amount'} ({newPromotion.type === 'percentage' ? '%' : 'GHS'})
+                    {newPromotion.type === 'percentage' ? 'Percentage' : newPromotion.type === 'fixed' ? 'Amount' : 'Value'} ({newPromotion.type === 'percentage' ? '%' : 'GHS'})
                   </Label>
                   <Input
                     id="promo-value"

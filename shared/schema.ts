@@ -237,6 +237,51 @@ export const purchaseOrders = pgTable("purchase_orders", {
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`)
 });
 
+// Inventory movements/stock adjustments for audit trail
+export const inventoryMovements = pgTable("inventory_movements", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  productId: uuid("product_id").references(() => products.id).notNull(),
+  locationId: uuid("location_id").references(() => locations.id).notNull(),
+  type: varchar("type", { length: 50 }).notNull(), // 'adjustment', 'sale', 'purchase', 'transfer', 'count'
+  quantity: integer("quantity").notNull(), // positive for increase, negative for decrease
+  previousQuantity: integer("previous_quantity").notNull(),
+  newQuantity: integer("new_quantity").notNull(),
+  reason: varchar("reason", { length: 100 }),
+  reference: varchar("reference", { length: 100 }), // order ID, PO ID, transfer ID, etc.
+  notes: text("notes"),
+  performedBy: uuid("performed_by").references(() => users.id),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`)
+}, (table) => ({
+  // Performance indexes
+  productLocationIdx: sql`CREATE INDEX IF NOT EXISTS idx_inventory_movements_product_location ON inventory_movements (product_id, location_id)`,
+  createdAtIdx: sql`CREATE INDEX IF NOT EXISTS idx_inventory_movements_created_at ON inventory_movements (created_at DESC)`,
+  typeIdx: sql`CREATE INDEX IF NOT EXISTS idx_inventory_movements_type ON inventory_movements (type)`
+}));
+
+// Advanced reorder rules for complex reordering logic
+export const reorderRules = pgTable("reorder_rules", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  productId: uuid("product_id").references(() => products.id).notNull(),
+  locationId: uuid("location_id").references(() => locations.id),
+  minLevel: integer("min_level").notNull(),
+  maxLevel: integer("max_level").notNull(),
+  reorderQuantity: integer("reorder_quantity").notNull(),
+  leadTimeDays: integer("lead_time_days").default(7),
+  seasonalMultiplier: decimal("seasonal_multiplier", { precision: 3, scale: 2 }).default("1.0"),
+  isActive: boolean("is_active").default(true),
+  priority: integer("priority").default(1), // 1=low, 2=medium, 3=high
+  supplierId: uuid("supplier_id").references(() => suppliers.id),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`)
+}, (table) => ({
+  // Performance indexes  
+  productLocationActiveIdx: sql`CREATE INDEX IF NOT EXISTS idx_reorder_rules_product_location_active ON reorder_rules (product_id, location_id, is_active)`,
+  isActiveIdx: sql`CREATE INDEX IF NOT EXISTS idx_reorder_rules_active ON reorder_rules (is_active) WHERE is_active = true`,
+  // Unique constraints: one global rule per product, one location-specific rule per product+location
+  globalRuleUnique: sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_reorder_rules_global ON reorder_rules (product_id) WHERE location_id IS NULL`,
+  locationRuleUnique: sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_reorder_rules_location ON reorder_rules (product_id, location_id) WHERE location_id IS NOT NULL`
+}));
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true, updatedAt: true, lastLogin: true });
 export const insertCategorySchema = createInsertSchema(categories).omit({ id: true, createdAt: true, updatedAt: true });
@@ -249,6 +294,8 @@ export const insertOrderSchema = createInsertSchema(orders).omit({ id: true, cre
 export const insertOrderItemSchema = createInsertSchema(orderItems).omit({ id: true, createdAt: true });
 export const insertEmailCampaignSchema = createInsertSchema(emailCampaigns).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertPurchaseOrderSchema = createInsertSchema(purchaseOrders).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertInventoryMovementSchema = createInsertSchema(inventoryMovements).omit({ id: true, createdAt: true });
+export const insertReorderRuleSchema = createInsertSchema(reorderRules).omit({ id: true, createdAt: true, updatedAt: true });
 
 // Types
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -273,6 +320,10 @@ export type InsertEmailCampaign = z.infer<typeof insertEmailCampaignSchema>;
 export type EmailCampaign = typeof emailCampaigns.$inferSelect;
 export type InsertPurchaseOrder = z.infer<typeof insertPurchaseOrderSchema>;
 export type PurchaseOrder = typeof purchaseOrders.$inferSelect;
+export type InsertInventoryMovement = z.infer<typeof insertInventoryMovementSchema>;
+export type InventoryMovement = typeof inventoryMovements.$inferSelect;
+export type InsertReorderRule = z.infer<typeof insertReorderRuleSchema>;
+export type ReorderRule = typeof reorderRules.$inferSelect;
 
 // Dashboard metrics type
 export interface DashboardMetrics {
