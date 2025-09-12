@@ -12,7 +12,7 @@ export const customerTypeEnum = pgEnum("customer_type", ["retail", "wholesale", 
 
 // Users table for admin authentication
 export const users = pgTable("users", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: uuid().defaultRandom().primaryKey().notNull(),
   email: varchar("email", { length: 255 }).notNull().unique(),
   password: text("password").notNull(),
   firstName: varchar("first_name", { length: 100 }),

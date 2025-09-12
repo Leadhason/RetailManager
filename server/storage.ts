@@ -27,6 +27,31 @@ if (!process.env.DATABASE_URL) {
 const sql_client = neon(process.env.DATABASE_URL);
 const db = drizzle(sql_client);
 
+// UUID normalization helper for fixing byte array serialization issue
+function uuidBytesToString(v: unknown): string {
+  if (typeof v === 'string') {
+    // If it's already a string, check if it's comma-separated bytes
+    if (v.includes(',')) {
+      // Convert comma-separated bytes to UUID string
+      const bytes = v.split(',').map(x => parseInt(x.trim()));
+      if (bytes.length === 16) {
+        const hex = bytes.map(x => x.toString(16).padStart(2, '0')).join('');
+        return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
+      }
+    }
+    return v; // Return as-is if already proper UUID format
+  }
+  
+  // Handle Uint8Array or regular arrays
+  const b = v instanceof Uint8Array ? Array.from(v) : Array.isArray(v) ? v : null;
+  if (!b || b.length !== 16) {
+    throw new Error(`Invalid UUID format: ${JSON.stringify(v)}`);
+  }
+  
+  const hex = b.map(x => x.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
+}
+
 export interface IStorage {
   // User management
   getUsers(): Promise<User[]>;
@@ -104,21 +129,74 @@ export class DatabaseStorage implements IStorage {
 
   async getUser(id: string): Promise<User | undefined> {
     const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
-    return result[0];
+    
+    if (!result || result.length === 0) {
+      return undefined;
+    }
+    
+    const user = result[0];
+    // Normalize UUID format
+    return {
+      ...user,
+      id: uuidBytesToString(user.id)
+    };
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
-    const result = await db.select().from(users).where(eq(users.email, email)).limit(1);
-    return result[0];
+    try {
+      // Normalize email for consistent lookup
+      const normalizedEmail = email.toLowerCase().trim();
+      const result = await db.select().from(users).where(eq(users.email, normalizedEmail)).limit(1);
+      
+      if (!result || result.length === 0) {
+        return undefined;
+      }
+      
+      const user = result[0];
+      // Normalize UUID format
+      return {
+        ...user,
+        id: uuidBytesToString(user.id)
+      };
+    } catch (error: any) {
+      // Handle Neon null-row mapping error
+      if (error.message?.includes('Cannot read properties of null')) {
+        return undefined;
+      }
+      throw error;
+    }
   }
 
   async createUser(user: InsertUser): Promise<User> {
     const hashedPassword = await bcrypt.hash(user.password, 10);
-    const result = await db.insert(users).values({
-      ...user,
-      password: hashedPassword
-    }).returning();
-    return result[0];
+    const normalizedEmail = user.email.toLowerCase().trim();
+    
+    // WORKAROUND: Use raw SQL to bypass Drizzle ORM isActive=true bug
+    const rawInsertResult = await db.execute(sql`
+      INSERT INTO users (email, password, first_name, last_name, role, is_active)
+      VALUES (${normalizedEmail}, ${hashedPassword}, ${user.firstName || ''}, ${user.lastName || ''}, ${user.role || 'staff'}, true)
+      RETURNING id, email, first_name, last_name, role, is_active, created_at, updated_at
+    `);
+    
+    if (!rawInsertResult.rows || rawInsertResult.rows.length === 0) {
+      throw new Error('Failed to create user - no rows returned');
+    }
+    
+    const rawUser = rawInsertResult.rows[0];
+    console.log(`[Auth] Raw insert successful: isActive=${rawUser.is_active}`);
+    
+    return {
+      id: uuidBytesToString(rawUser.id),
+      email: rawUser.email,
+      firstName: rawUser.first_name, 
+      lastName: rawUser.last_name,
+      role: rawUser.role,
+      isActive: rawUser.is_active,
+      permissions: {},
+      lastLogin: null,
+      createdAt: rawUser.created_at,
+      updatedAt: rawUser.updated_at
+    };
   }
 
   async updateUser(id: string, updates: Partial<InsertUser>): Promise<User | undefined> {
@@ -129,6 +207,11 @@ export class DatabaseStorage implements IStorage {
       .set({ ...updates, updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(eq(users.id, id))
       .returning();
+    
+    if (!result || result.length === 0) {
+      return undefined;
+    }
+    
     return result[0];
   }
 
@@ -138,10 +221,23 @@ export class DatabaseStorage implements IStorage {
   }
 
   async verifyPassword(email: string, password: string): Promise<User | null> {
+    console.log(`[Auth] Verifying password for email: ${email}`);
     const user = await this.getUserByEmail(email);
-    if (!user) return null;
+    if (!user) {
+      console.log(`[Auth] User not found for email: ${email}`);
+      return null;
+    }
+    
+    console.log(`[Auth] User found: id=${user.id}, isActive=${user.isActive}`);
+    
+    // Check if user is active
+    if (!user.isActive) {
+      console.log(`[Auth] User account is inactive for email: ${email}`);
+      return null;
+    }
     
     const isValid = await bcrypt.compare(password, user.password);
+    console.log(`[Auth] Password verification result: ${isValid}`);
     if (!isValid) return null;
     
     // Update last login
@@ -149,6 +245,7 @@ export class DatabaseStorage implements IStorage {
       .set({ lastLogin: sql`CURRENT_TIMESTAMP` })
       .where(eq(users.id, user.id));
     
+    console.log(`[Auth] Login successful for email: ${email}`);
     return user;
   }
 
@@ -162,16 +259,31 @@ export class DatabaseStorage implements IStorage {
 
   async getProduct(id: string): Promise<Product | undefined> {
     const result = await db.select().from(products).where(eq(products.id, id)).limit(1);
+    
+    if (!result || result.length === 0) {
+      return undefined;
+    }
+    
     return result[0];
   }
 
   async getProductBySku(sku: string): Promise<Product | undefined> {
     const result = await db.select().from(products).where(eq(products.sku, sku)).limit(1);
+    
+    if (!result || result.length === 0) {
+      return undefined;
+    }
+    
     return result[0];
   }
 
   async createProduct(product: InsertProduct): Promise<Product> {
     const result = await db.insert(products).values(product).returning();
+    
+    if (!result || result.length === 0) {
+      throw new Error('Failed to create product - no result returned from database');
+    }
+    
     return result[0];
   }
 
@@ -180,6 +292,11 @@ export class DatabaseStorage implements IStorage {
       .set({ ...updates, updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(eq(products.id, id))
       .returning();
+    
+    if (!result || result.length === 0) {
+      return undefined;
+    }
+    
     return result[0];
   }
 
