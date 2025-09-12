@@ -1,6 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { storage } from "./storage";
 
 const app = express();
 app.use(express.json());
@@ -36,7 +37,29 @@ app.use((req, res, next) => {
   next();
 });
 
+// Seed default admin user on startup
+async function seedDefaultAdmin() {
+  try {
+    const existingUsers = await storage.getUsers();
+    if (existingUsers.length === 0) {
+      log("No users found, creating default admin user...");
+      await storage.createUser({
+        email: "admin@edmax.com",
+        password: "admin123",
+        firstName: "System",
+        lastName: "Administrator",
+        role: "super_admin",
+        isActive: true
+      });
+      log("Default admin created: admin@edmax.com / admin123");
+    }
+  } catch (error) {
+    log("Error seeding default admin:", error instanceof Error ? error.message : String(error));
+  }
+}
+
 (async () => {
+  await seedDefaultAdmin();
   const server = await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {

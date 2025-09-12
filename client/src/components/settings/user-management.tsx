@@ -35,7 +35,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Plus, MoreHorizontal, Edit, Trash2, Shield, User, Search } from "lucide-react";
+import { Plus, MoreHorizontal, Edit, Trash2, Shield, User as UserIcon, Search } from "lucide-react";
 import type { User } from "@shared/schema";
 
 interface UserManagementProps {
@@ -76,9 +76,9 @@ const getRoleIcon = (role: string) => {
     case 'super_admin':
       return <Shield className="w-4 h-4" />;
     case 'store_manager':
-      return <User className="w-4 h-4" />;
+      return <UserIcon className="w-4 h-4" />;
     default:
-      return <User className="w-4 h-4" />;
+      return <UserIcon className="w-4 h-4" />;
   }
 };
 
@@ -173,7 +173,7 @@ export default function UserManagement({
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Store Managers</CardTitle>
-            <User className="h-4 w-4 text-blue-500" />
+            <UserIcon className="h-4 w-4 text-blue-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{roleStats.store_manager}</div>
@@ -183,7 +183,7 @@ export default function UserManagement({
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Staff</CardTitle>
-            <User className="h-4 w-4 text-green-500" />
+            <UserIcon className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{roleStats.staff}</div>
@@ -193,7 +193,7 @@ export default function UserManagement({
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">View Only</CardTitle>
-            <User className="h-4 w-4 text-gray-500" />
+            <UserIcon className="h-4 w-4 text-gray-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{roleStats.view_only}</div>

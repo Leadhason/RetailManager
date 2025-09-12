@@ -31,7 +31,7 @@ export const categories = pgTable("categories", {
   name: varchar("name", { length: 255 }).notNull(),
   slug: varchar("slug", { length: 255 }).notNull().unique(),
   description: text("description"),
-  parentId: uuid("parent_id").references(() => categories.id),
+  parentId: uuid("parent_id"),
   image: text("image"),
   isActive: boolean("is_active").default(true),
   sortOrder: integer("sort_order").default(0),

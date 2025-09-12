@@ -83,6 +83,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ message: "Logout successful" });
   });
 
+  // Temporary registration endpoint for testing (remove in production)
+  app.post("/api/auth/register", async (req, res) => {
+    try {
+      const userData = insertUserSchema.parse(req.body);
+      
+      // For testing, allow creating admin users
+      if (!userData.role) {
+        userData.role = "super_admin";
+      }
+      
+      const user = await storage.createUser(userData);
+      
+      res.status(201).json({
+        message: "User registered successfully",
+        user: {
+          id: user.id,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          role: user.role
+        }
+      });
+    } catch (error) {
+      console.error("Registration error:", error);
+      res.status(500).json({ message: "Registration failed" });
+    }
+  });
+
   // Dashboard routes
   app.get("/api/dashboard/metrics", authenticate, async (req, res) => {
     try {

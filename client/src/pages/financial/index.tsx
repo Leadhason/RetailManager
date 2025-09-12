@@ -7,7 +7,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { useTransactions, useFinancialMetrics, useProcessRefund } from "@/hooks/use-financial";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import { CalendarIcon, DollarSign, CreditCard, TrendingUp, Download, RefreshCw, AlertCircle } from "lucide-react";
+import { CalendarIcon, DollarSign, CreditCard, TrendingUp, Download, RefreshCw, AlertCircle, BarChart3 } from "lucide-react";
 import TransactionTable from "@/components/financial/transaction-table";
 import PaymentOverview from "@/components/financial/payment-overview";
 
