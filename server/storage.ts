@@ -182,20 +182,21 @@ export class DatabaseStorage implements IStorage {
       throw new Error('Failed to create user - no rows returned');
     }
     
-    const rawUser = rawInsertResult.rows[0];
+    const rawUser = rawInsertResult.rows[0] as any;
     console.log(`[Auth] Raw insert successful: isActive=${rawUser.is_active}`);
     
     return {
       id: uuidBytesToString(rawUser.id),
-      email: rawUser.email,
-      firstName: rawUser.first_name, 
-      lastName: rawUser.last_name,
-      role: rawUser.role,
-      isActive: rawUser.is_active,
+      email: rawUser.email as string,
+      password: hashedPassword,
+      firstName: rawUser.first_name as string, 
+      lastName: rawUser.last_name as string,
+      role: rawUser.role as "super_admin" | "store_manager" | "staff" | "view_only",
+      isActive: rawUser.is_active as boolean,
       permissions: {},
       lastLogin: null,
-      createdAt: rawUser.created_at,
-      updatedAt: rawUser.updated_at
+      createdAt: rawUser.created_at as Date,
+      updatedAt: rawUser.updated_at as Date
     };
   }
 
@@ -565,7 +566,7 @@ export class DatabaseStorage implements IStorage {
       db.select({
         id: orders.id,
         orderNumber: orders.orderNumber,
-        customerName: sql`CONCAT(${customers.firstName}, ' ', ${customers.lastName})`.as('customerName'),
+        customerName: sql<string>`CONCAT(COALESCE(${customers.firstName}, ''), ' ', COALESCE(${customers.lastName}, ''))`.as('customerName'),
         totalAmount: orders.totalAmount,
         status: orders.status,
         createdAt: orders.createdAt
@@ -598,7 +599,7 @@ export class DatabaseStorage implements IStorage {
         orderNumber: order.orderNumber,
         customerName: order.customerName || 'Guest',
         totalAmount: Number(order.totalAmount),
-        status: order.status,
+        status: order.status || 'pending',
         createdAt: order.createdAt?.toISOString() || ''
       })),
       topProducts: topProductsResult.map(product => ({
