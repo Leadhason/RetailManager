@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,43 +7,69 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Search, Edit, Trash2, Tag, Package } from "lucide-react";
+import { useCategories, useCreateCategory, useDeleteCategory, useProductsByCategory } from "@/hooks/use-categories";
+import { Plus, Search, Edit, Trash2, Tag, Package, ExternalLink, Loader2 } from "lucide-react";
+import type { Category } from "@shared/schema";
 
-interface Category {
-  id: string;
-  name: string;
-  description: string;
+// Extended category type with product count
+interface CategoryWithCount extends Category {
   productCount: number;
-  isActive: boolean;
-  parentCategory?: string;
 }
+import { Link } from "wouter";
+
 
 export default function CategoriesIndex() {
-  const [categories] = useState<Category[]>([
-    { id: "1", name: "Power Tools", description: "Electric and battery powered tools", productCount: 45, isActive: true },
-    { id: "2", name: "Hand Tools", description: "Manual tools and equipment", productCount: 32, isActive: true },
-    { id: "3", name: "Building Materials", description: "Construction and building supplies", productCount: 78, isActive: true },
-    { id: "4", name: "Electrical", description: "Electrical supplies and components", productCount: 56, isActive: true },
-    { id: "5", name: "Safety Equipment", description: "Personal protective equipment", productCount: 23, isActive: true },
-  ]);
+  const { data: categories = [], isLoading, error } = useCategories() as { data: CategoryWithCount[], isLoading: boolean, error: any };
+  const createCategoryMutation = useCreateCategory();
+  const deleteCategoryMutation = useDeleteCategory();
 
   const [searchTerm, setSearchTerm] = useState("");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const [newCategory, setNewCategory] = useState({ name: "", description: "" });
+  const [newCategory, setNewCategory] = useState({ name: "", description: "", slug: "" });
   const { toast } = useToast();
 
-  const filteredCategories = categories.filter(category =>
-    category.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    category.description.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredCategories = useMemo(() => {
+    if (!categories) return [];
+    return categories.filter(category =>
+      category.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (category.description || "").toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [categories, searchTerm]);
 
-  const handleAddCategory = () => {
-    toast({
-      title: "Category Added",
-      description: `${newCategory.name} has been created successfully.`,
-    });
-    setIsAddDialogOpen(false);
-    setNewCategory({ name: "", description: "" });
+  const handleAddCategory = async () => {
+    if (!newCategory.name.trim()) {
+      toast({
+        title: "Validation Error",
+        description: "Category name is required.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const slug = newCategory.name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+      await createCategoryMutation.mutateAsync({
+        name: newCategory.name.trim(),
+        description: newCategory.description.trim() || null,
+        slug,
+        isActive: true,
+        sortOrder: 0
+      });
+      
+      toast({
+        title: "Category Added",
+        description: `${newCategory.name} has been created successfully.`,
+      });
+      
+      setIsAddDialogOpen(false);
+      setNewCategory({ name: "", description: "", slug: "" });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to create category. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleEditCategory = (category: Category) => {
@@ -53,13 +79,54 @@ export default function CategoriesIndex() {
     });
   };
 
-  const handleDeleteCategory = (category: Category) => {
-    toast({
-      title: "Delete Category",
-      description: `Are you sure you want to delete ${category.name}? (feature coming soon)`,
-      variant: "destructive",
-    });
+  const handleDeleteCategory = async (category: Category) => {
+    if (!confirm(`Are you sure you want to delete the category "${category.name}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      await deleteCategoryMutation.mutateAsync(category.id);
+      toast({
+        title: "Category Deleted",
+        description: `${category.name} has been deleted successfully.`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete category. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="space-y-6" data-testid="categories-page">
+        <div className="flex items-center justify-center min-h-96">
+          <Loader2 className="h-8 w-8 animate-spin" />
+          <span className="ml-2">Loading categories...</span>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="space-y-6" data-testid="categories-page">
+        <Card>
+          <CardContent className="text-center py-12">
+            <h3 className="text-lg font-semibold mb-2 text-destructive">Error Loading Categories</h3>
+            <p className="text-muted-foreground mb-4">
+              {error instanceof Error ? error.message : "Failed to load categories"}
+            </p>
+            <Button onClick={() => window.location.reload()}>Try Again</Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6" data-testid="categories-page">
@@ -105,7 +172,19 @@ export default function CategoriesIndex() {
                 <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
                   Cancel
                 </Button>
-                <Button onClick={handleAddCategory}>Add Category</Button>
+                <Button 
+                  onClick={handleAddCategory}
+                  disabled={createCategoryMutation.isPending}
+                >
+                  {createCategoryMutation.isPending ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Creating...
+                    </>
+                  ) : (
+                    "Add Category"
+                  )}
+                </Button>
               </div>
             </div>
           </DialogContent>
@@ -171,13 +250,22 @@ export default function CategoriesIndex() {
                     size="sm"
                     onClick={() => handleDeleteCategory(category)}
                     data-testid={`delete-category-${category.id}`}
+                    disabled={deleteCategoryMutation.isPending}
                   >
-                    <Trash2 className="w-4 h-4" />
+                    {deleteCategoryMutation.isPending ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-4 h-4" />
+                    )}
                   </Button>
                 </div>
-                <Button variant="link" size="sm" className="text-primary">
-                  View Products →
-                </Button>
+                <Link href={`/products?category=${category.id}`}>
+                  <Button variant="link" size="sm" className="text-primary" data-testid={`view-products-${category.id}`}>
+                    <Package className="w-4 h-4 mr-1" />
+                    View Products
+                    <ExternalLink className="w-3 h-3 ml-1" />
+                  </Button>
+                </Link>
               </div>
             </CardContent>
           </Card>
