@@ -72,6 +72,7 @@ export interface IStorage {
   updateProduct(id: string, updates: Partial<InsertProduct>): Promise<Product | undefined>;
   deleteProduct(id: string): Promise<boolean>;
   searchProducts(query: string): Promise<Product[]>;
+  getProductsByCategory(categoryId: string, limit?: number, offset?: number): Promise<Product[]>;
 
   // Category management
   getCategories(): Promise<Category[]>;
@@ -357,6 +358,14 @@ export class DatabaseStorage implements IStorage {
         )
       )
       .limit(20);
+  }
+
+  async getProductsByCategory(categoryId: string, limit = 50, offset = 0): Promise<Product[]> {
+    return await db.select().from(products)
+      .where(eq(products.categoryId, categoryId))
+      .orderBy(desc(products.createdAt))
+      .limit(limit)
+      .offset(offset);
   }
 
   // Category management

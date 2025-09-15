@@ -243,6 +243,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/categories/:id/products", authenticate, async (req, res) => {
+    try {
+      const { limit = 50, offset = 0 } = req.query;
+      const products = await storage.getProductsByCategory(
+        req.params.id, 
+        Number(limit), 
+        Number(offset)
+      );
+      res.json(products);
+    } catch (error) {
+      console.error("Get products by category error:", error);
+      res.status(500).json({ message: "Failed to fetch products by category" });
+    }
+  });
+
   app.post("/api/products", authenticate, authorize("staff"), async (req, res) => {
     try {
       const productData = insertProductSchema.parse(req.body);
