@@ -16,10 +16,14 @@ import {
   type PurchaseOrder, type InsertPurchaseOrder,
   type InventoryMovement, type InsertInventoryMovement,
   type ReorderRule, type InsertReorderRule,
+  type Transaction, type InsertTransaction,
+  type Receipt, type InsertReceipt,
+  type TaxRecord, type InsertTaxRecord,
   type DashboardMetrics,
   users, products, categories, customers, orders, orderItems,
   suppliers, inventory, locations, emailCampaigns, purchaseOrders,
-  inventoryMovements, reorderRules, orderStatusHistory, customerInteractions
+  inventoryMovements, reorderRules, orderStatusHistory, customerInteractions,
+  transactions, receipts, taxRecords
 } from "@shared/schema";
 
 if (!process.env.DATABASE_URL) {
@@ -158,6 +162,60 @@ export interface IStorage {
   getEmailCampaigns(): Promise<EmailCampaign[]>;
   createEmailCampaign(campaign: InsertEmailCampaign): Promise<EmailCampaign>;
   updateEmailCampaign(id: string, updates: Partial<InsertEmailCampaign>): Promise<EmailCampaign | undefined>;
+
+  // Financial management - Transactions
+  getTransactions(limit?: number, offset?: number, filters?: {
+    startDate?: Date;
+    endDate?: Date;
+    status?: string;
+    paymentMethod?: string;
+    customerId?: string;
+    orderId?: string;
+  }): Promise<Transaction[]>;
+  getTransaction(id: string): Promise<Transaction | undefined>;
+  getTransactionsByOrder(orderId: string): Promise<Transaction[]>;
+  getTransactionsByCustomer(customerId: string): Promise<Transaction[]>;
+  createTransaction(transaction: InsertTransaction): Promise<Transaction>;
+  updateTransaction(id: string, updates: Partial<InsertTransaction>): Promise<Transaction | undefined>;
+  updateTransactionStatus(id: string, status: string, failureReason?: string): Promise<boolean>;
+
+  // Financial management - Receipts
+  getReceipts(limit?: number, offset?: number, filters?: {
+    startDate?: Date;
+    endDate?: Date;
+    status?: string;
+    customerId?: string;
+    orderId?: string;
+  }): Promise<Receipt[]>;
+  getReceipt(id: string): Promise<Receipt | undefined>;
+  getReceiptByTransaction(transactionId: string): Promise<Receipt | undefined>;
+  getReceiptsByCustomer(customerId: string): Promise<Receipt[]>;
+  createReceipt(receipt: InsertReceipt): Promise<Receipt>;
+  updateReceipt(id: string, updates: Partial<InsertReceipt>): Promise<Receipt | undefined>;
+  markReceiptViewed(id: string): Promise<boolean>;
+
+  // Financial management - Tax Records
+  getTaxRecords(period?: string, taxType?: string): Promise<TaxRecord[]>;
+  getTaxRecord(id: string): Promise<TaxRecord | undefined>;
+  createTaxRecord(taxRecord: InsertTaxRecord): Promise<TaxRecord>;
+  updateTaxRecord(id: string, updates: Partial<InsertTaxRecord>): Promise<TaxRecord | undefined>;
+  deleteTaxRecord(id: string): Promise<boolean>;
+
+  // Financial analytics
+  getPaymentSummary(startDate?: Date, endDate?: Date): Promise<{
+    totalRevenue: number;
+    totalTransactions: number;
+    successfulPayments: number;
+    failedPayments: number;
+    totalFees: number;
+    netRevenue: number;
+    averageOrderValue: number;
+    paymentMethodBreakdown: Array<{
+      method: string;
+      count: number;
+      amount: number;
+    }>;
+  }>;
 
   // Dashboard metrics
   getDashboardMetrics(): Promise<DashboardMetrics>;
@@ -958,6 +1016,294 @@ export class DatabaseStorage implements IStorage {
         units: 0 // Would need actual sales data
       })),
       salesData: [] // Would implement with actual sales aggregation
+    };
+  }
+
+  // Financial management - Transactions
+  async getTransactions(limit = 50, offset = 0, filters?: {
+    startDate?: Date;
+    endDate?: Date;
+    status?: string;
+    paymentMethod?: string;
+    customerId?: string;
+    orderId?: string;
+  }): Promise<Transaction[]> {
+    const conditions = [];
+    
+    if (filters?.startDate) {
+      conditions.push(gte(transactions.createdAt, filters.startDate));
+    }
+    if (filters?.endDate) {
+      conditions.push(lte(transactions.createdAt, filters.endDate));
+    }
+    if (filters?.status) {
+      conditions.push(eq(transactions.status, filters.status as any));
+    }
+    if (filters?.paymentMethod) {
+      conditions.push(eq(transactions.paymentMethod, filters.paymentMethod));
+    }
+    if (filters?.customerId) {
+      conditions.push(eq(transactions.customerId, filters.customerId));
+    }
+    if (filters?.orderId) {
+      conditions.push(eq(transactions.orderId, filters.orderId));
+    }
+    
+    let query = db.select().from(transactions);
+    
+    if (conditions.length > 0) {
+      query = query.where(conditions.length === 1 ? conditions[0] : and(...conditions));
+    }
+    
+    return await query
+      .orderBy(desc(transactions.createdAt))
+      .limit(limit)
+      .offset(offset);
+  }
+
+  async getTransaction(id: string): Promise<Transaction | undefined> {
+    const result = await db.select().from(transactions).where(eq(transactions.id, id)).limit(1);
+    return result[0];
+  }
+
+  async getTransactionsByOrder(orderId: string): Promise<Transaction[]> {
+    return await db.select().from(transactions)
+      .where(eq(transactions.orderId, orderId))
+      .orderBy(desc(transactions.createdAt));
+  }
+
+  async getTransactionsByCustomer(customerId: string): Promise<Transaction[]> {
+    return await db.select().from(transactions)
+      .where(eq(transactions.customerId, customerId))
+      .orderBy(desc(transactions.createdAt));
+  }
+
+  async createTransaction(transaction: InsertTransaction): Promise<Transaction> {
+    const result = await db.insert(transactions).values(transaction).returning();
+    return result[0];
+  }
+
+  async updateTransaction(id: string, updates: Partial<InsertTransaction>): Promise<Transaction | undefined> {
+    const result = await db.update(transactions)
+      .set({ ...updates, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(eq(transactions.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async updateTransactionStatus(id: string, status: string, failureReason?: string): Promise<boolean> {
+    const updates: any = { 
+      status: status as any, 
+      updatedAt: sql`CURRENT_TIMESTAMP` 
+    };
+    
+    if (status === 'completed') {
+      updates.processedAt = sql`CURRENT_TIMESTAMP`;
+    }
+    
+    if (failureReason) {
+      updates.failureReason = failureReason;
+    }
+
+    const result = await db.update(transactions)
+      .set(updates)
+      .where(eq(transactions.id, id));
+    
+    return result.rowCount > 0;
+  }
+
+  // Financial management - Receipts
+  async getReceipts(limit = 50, offset = 0, filters?: {
+    startDate?: Date;
+    endDate?: Date;
+    status?: string;
+    customerId?: string;
+    orderId?: string;
+  }): Promise<Receipt[]> {
+    const conditions = [];
+    
+    if (filters?.startDate) {
+      conditions.push(gte(receipts.createdAt, filters.startDate));
+    }
+    if (filters?.endDate) {
+      conditions.push(lte(receipts.createdAt, filters.endDate));
+    }
+    if (filters?.status) {
+      conditions.push(eq(receipts.status, filters.status as any));
+    }
+    if (filters?.customerId) {
+      conditions.push(eq(receipts.customerId, filters.customerId));
+    }
+    if (filters?.orderId) {
+      conditions.push(eq(receipts.orderId, filters.orderId));
+    }
+    
+    let query = db.select().from(receipts);
+    
+    if (conditions.length > 0) {
+      query = query.where(conditions.length === 1 ? conditions[0] : and(...conditions));
+    }
+    
+    return await query
+      .orderBy(desc(receipts.createdAt))
+      .limit(limit)
+      .offset(offset);
+  }
+
+  async getReceipt(id: string): Promise<Receipt | undefined> {
+    const result = await db.select().from(receipts).where(eq(receipts.id, id)).limit(1);
+    return result[0];
+  }
+
+  async getReceiptByTransaction(transactionId: string): Promise<Receipt | undefined> {
+    const result = await db.select().from(receipts)
+      .where(eq(receipts.transactionId, transactionId))
+      .limit(1);
+    return result[0];
+  }
+
+  async getReceiptsByCustomer(customerId: string): Promise<Receipt[]> {
+    return await db.select().from(receipts)
+      .where(eq(receipts.customerId, customerId))
+      .orderBy(desc(receipts.createdAt));
+  }
+
+  async createReceipt(receipt: InsertReceipt): Promise<Receipt> {
+    const result = await db.insert(receipts).values(receipt).returning();
+    return result[0];
+  }
+
+  async updateReceipt(id: string, updates: Partial<InsertReceipt>): Promise<Receipt | undefined> {
+    const result = await db.update(receipts)
+      .set(updates)
+      .where(eq(receipts.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async markReceiptViewed(id: string): Promise<boolean> {
+    const result = await db.update(receipts)
+      .set({ 
+        status: 'viewed',
+        viewedAt: sql`CURRENT_TIMESTAMP` 
+      })
+      .where(eq(receipts.id, id));
+    
+    return result.rowCount > 0;
+  }
+
+  // Financial management - Tax Records
+  async getTaxRecords(period?: string, taxType?: string): Promise<TaxRecord[]> {
+    const conditions = [];
+    
+    if (period) {
+      conditions.push(eq(taxRecords.period, period));
+    }
+    if (taxType) {
+      conditions.push(eq(taxRecords.taxType, taxType as any));
+    }
+    
+    let query = db.select().from(taxRecords);
+    
+    if (conditions.length > 0) {
+      query = query.where(conditions.length === 1 ? conditions[0] : and(...conditions));
+    }
+    
+    return await query.orderBy(desc(taxRecords.createdAt));
+  }
+
+  async getTaxRecord(id: string): Promise<TaxRecord | undefined> {
+    const result = await db.select().from(taxRecords).where(eq(taxRecords.id, id)).limit(1);
+    return result[0];
+  }
+
+  async createTaxRecord(taxRecord: InsertTaxRecord): Promise<TaxRecord> {
+    const result = await db.insert(taxRecords).values(taxRecord).returning();
+    return result[0];
+  }
+
+  async updateTaxRecord(id: string, updates: Partial<InsertTaxRecord>): Promise<TaxRecord | undefined> {
+    const result = await db.update(taxRecords)
+      .set({ ...updates, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(eq(taxRecords.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteTaxRecord(id: string): Promise<boolean> {
+    const result = await db.delete(taxRecords).where(eq(taxRecords.id, id));
+    return result.rowCount > 0;
+  }
+
+  // Financial analytics
+  async getPaymentSummary(startDate?: Date, endDate?: Date): Promise<{
+    totalRevenue: number;
+    totalTransactions: number;
+    successfulPayments: number;
+    failedPayments: number;
+    totalFees: number;
+    netRevenue: number;
+    averageOrderValue: number;
+    paymentMethodBreakdown: Array<{
+      method: string;
+      count: number;
+      amount: number;
+    }>;
+  }> {
+    const dateConditions = [];
+    
+    if (startDate) {
+      dateConditions.push(gte(transactions.createdAt, startDate));
+    }
+    if (endDate) {
+      dateConditions.push(lte(transactions.createdAt, endDate));
+    }
+    
+    const dateFilter = dateConditions.length > 0 ? and(...dateConditions) : undefined;
+    
+    const [summaryResults, paymentMethodResults] = await Promise.all([
+      // Summary metrics
+      db.select({
+        totalRevenue: sum(transactions.amount),
+        totalTransactions: count(),
+        successfulPayments: sql<number>`COUNT(CASE WHEN ${transactions.status} = 'completed' THEN 1 END)`,
+        failedPayments: sql<number>`COUNT(CASE WHEN ${transactions.status} = 'failed' THEN 1 END)`,
+        totalFees: sum(transactions.fees),
+        netAmount: sum(transactions.netAmount)
+      })
+        .from(transactions)
+        .where(dateFilter),
+      
+      // Payment method breakdown
+      db.select({
+        method: transactions.paymentMethod,
+        count: count(),
+        amount: sum(transactions.amount)
+      })
+        .from(transactions)
+        .where(and(
+          eq(transactions.status, 'completed'),
+          dateFilter
+        ))
+        .groupBy(transactions.paymentMethod)
+    ]);
+
+    const summary = summaryResults[0];
+    
+    return {
+      totalRevenue: Number(summary?.totalRevenue || 0),
+      totalTransactions: summary?.totalTransactions || 0,
+      successfulPayments: Number(summary?.successfulPayments || 0),
+      failedPayments: Number(summary?.failedPayments || 0),
+      totalFees: Number(summary?.totalFees || 0),
+      netRevenue: Number(summary?.netAmount || 0),
+      averageOrderValue: summary?.totalTransactions ? 
+        Number(summary.totalRevenue || 0) / summary.totalTransactions : 0,
+      paymentMethodBreakdown: paymentMethodResults.map(result => ({
+        method: result.method || 'Unknown',
+        count: result.count || 0,
+        amount: Number(result.amount || 0)
+      }))
     };
   }
 }

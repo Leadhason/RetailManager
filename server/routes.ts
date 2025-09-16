@@ -8,6 +8,7 @@ import {
   insertCustomerSchema, insertOrderSchema, insertSupplierSchema,
   insertInventorySchema, insertLocationSchema, insertEmailCampaignSchema,
   insertInventoryMovementSchema, insertReorderRuleSchema,
+  insertTransactionSchema, insertReceiptSchema, insertTaxRecordSchema,
   locations
 } from "@shared/schema";
 import { z } from "zod";
@@ -902,6 +903,307 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       console.error("Update email campaign error:", error);
       res.status(500).json({ message: "Failed to update email campaign" });
+    }
+  });
+
+  // Financial routes - Transactions
+  app.get("/api/financial/transactions", authenticate, authorize("staff"), async (req, res) => {
+    try {
+      const { 
+        limit = 50, 
+        offset = 0, 
+        startDate, 
+        endDate, 
+        status, 
+        paymentMethod, 
+        customerId, 
+        orderId 
+      } = req.query;
+      
+      const filters: any = {};
+      if (startDate) filters.startDate = new Date(startDate as string);
+      if (endDate) filters.endDate = new Date(endDate as string);
+      if (status) filters.status = status as string;
+      if (paymentMethod) filters.paymentMethod = paymentMethod as string;
+      if (customerId) filters.customerId = customerId as string;
+      if (orderId) filters.orderId = orderId as string;
+      
+      const transactions = await storage.getTransactions(
+        Number(limit), 
+        Number(offset), 
+        Object.keys(filters).length > 0 ? filters : undefined
+      );
+      res.json(transactions);
+    } catch (error) {
+      console.error("Get transactions error:", error);
+      res.status(500).json({ message: "Failed to fetch transactions" });
+    }
+  });
+
+  app.get("/api/financial/transactions/:id", authenticate, authorize("staff"), async (req, res) => {
+    try {
+      const transaction = await storage.getTransaction(req.params.id);
+      if (!transaction) {
+        return res.status(404).json({ message: "Transaction not found" });
+      }
+      res.json(transaction);
+    } catch (error) {
+      console.error("Get transaction error:", error);
+      res.status(500).json({ message: "Failed to fetch transaction" });
+    }
+  });
+
+  app.get("/api/financial/transactions/order/:orderId", authenticate, authorize("staff"), async (req, res) => {
+    try {
+      const transactions = await storage.getTransactionsByOrder(req.params.orderId);
+      res.json(transactions);
+    } catch (error) {
+      console.error("Get order transactions error:", error);
+      res.status(500).json({ message: "Failed to fetch order transactions" });
+    }
+  });
+
+  app.post("/api/financial/transactions", authenticate, authorize("staff"), async (req, res) => {
+    try {
+      const transactionData = insertTransactionSchema.parse(req.body);
+      const transaction = await storage.createTransaction(transactionData);
+      res.status(201).json(transaction);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      console.error("Create transaction error:", error);
+      res.status(500).json({ message: "Failed to create transaction" });
+    }
+  });
+
+  app.put("/api/financial/transactions/:id", authenticate, authorize("staff"), async (req, res) => {
+    try {
+      const updates = insertTransactionSchema.partial().parse(req.body);
+      const transaction = await storage.updateTransaction(req.params.id, updates);
+      
+      if (!transaction) {
+        return res.status(404).json({ message: "Transaction not found" });
+      }
+      
+      res.json(transaction);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      console.error("Update transaction error:", error);
+      res.status(500).json({ message: "Failed to update transaction" });
+    }
+  });
+
+  // Financial routes - Receipts
+  app.get("/api/financial/receipts", authenticate, authorize("staff"), async (req, res) => {
+    try {
+      const { 
+        limit = 50, 
+        offset = 0, 
+        startDate, 
+        endDate, 
+        status, 
+        customerId, 
+        orderId 
+      } = req.query;
+      
+      const filters: any = {};
+      if (startDate) filters.startDate = new Date(startDate as string);
+      if (endDate) filters.endDate = new Date(endDate as string);
+      if (status) filters.status = status as string;
+      if (customerId) filters.customerId = customerId as string;
+      if (orderId) filters.orderId = orderId as string;
+      
+      const receipts = await storage.getReceipts(
+        Number(limit), 
+        Number(offset), 
+        Object.keys(filters).length > 0 ? filters : undefined
+      );
+      res.json(receipts);
+    } catch (error) {
+      console.error("Get receipts error:", error);
+      res.status(500).json({ message: "Failed to fetch receipts" });
+    }
+  });
+
+  app.get("/api/financial/receipts/:id", authenticate, authorize("staff"), async (req, res) => {
+    try {
+      const receipt = await storage.getReceipt(req.params.id);
+      if (!receipt) {
+        return res.status(404).json({ message: "Receipt not found" });
+      }
+      res.json(receipt);
+    } catch (error) {
+      console.error("Get receipt error:", error);
+      res.status(500).json({ message: "Failed to fetch receipt" });
+    }
+  });
+
+  app.get("/api/financial/receipts/transaction/:transactionId", authenticate, authorize("staff"), async (req, res) => {
+    try {
+      const receipt = await storage.getReceiptByTransaction(req.params.transactionId);
+      if (!receipt) {
+        return res.status(404).json({ message: "Receipt not found for transaction" });
+      }
+      res.json(receipt);
+    } catch (error) {
+      console.error("Get transaction receipt error:", error);
+      res.status(500).json({ message: "Failed to fetch transaction receipt" });
+    }
+  });
+
+  app.post("/api/financial/receipts", authenticate, authorize("staff"), async (req, res) => {
+    try {
+      const receiptData = insertReceiptSchema.parse(req.body);
+      const receipt = await storage.createReceipt(receiptData);
+      res.status(201).json(receipt);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      console.error("Create receipt error:", error);
+      res.status(500).json({ message: "Failed to create receipt" });
+    }
+  });
+
+  app.put("/api/financial/receipts/:id/viewed", authenticate, authorize("staff"), async (req, res) => {
+    try {
+      const success = await storage.markReceiptViewed(req.params.id);
+      if (!success) {
+        return res.status(404).json({ message: "Receipt not found" });
+      }
+      res.json({ message: "Receipt marked as viewed" });
+    } catch (error) {
+      console.error("Mark receipt viewed error:", error);
+      res.status(500).json({ message: "Failed to mark receipt as viewed" });
+    }
+  });
+
+  // Financial routes - Tax Records
+  app.get("/api/financial/tax-records", authenticate, authorize("staff"), async (req, res) => {
+    try {
+      const { period, taxType } = req.query;
+      const taxRecords = await storage.getTaxRecords(
+        period as string, 
+        taxType as string
+      );
+      res.json(taxRecords);
+    } catch (error) {
+      console.error("Get tax records error:", error);
+      res.status(500).json({ message: "Failed to fetch tax records" });
+    }
+  });
+
+  app.get("/api/financial/tax-records/:id", authenticate, authorize("staff"), async (req, res) => {
+    try {
+      const taxRecord = await storage.getTaxRecord(req.params.id);
+      if (!taxRecord) {
+        return res.status(404).json({ message: "Tax record not found" });
+      }
+      res.json(taxRecord);
+    } catch (error) {
+      console.error("Get tax record error:", error);
+      res.status(500).json({ message: "Failed to fetch tax record" });
+    }
+  });
+
+  app.post("/api/financial/tax-records", authenticate, authorize("staff"), async (req: any, res) => {
+    try {
+      const taxRecordData = insertTaxRecordSchema.parse({
+        ...req.body,
+        createdBy: req.user.id
+      });
+      const taxRecord = await storage.createTaxRecord(taxRecordData);
+      res.status(201).json(taxRecord);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      console.error("Create tax record error:", error);
+      res.status(500).json({ message: "Failed to create tax record" });
+    }
+  });
+
+  app.put("/api/financial/tax-records/:id", authenticate, authorize("staff"), async (req, res) => {
+    try {
+      const updates = insertTaxRecordSchema.partial().parse(req.body);
+      const taxRecord = await storage.updateTaxRecord(req.params.id, updates);
+      
+      if (!taxRecord) {
+        return res.status(404).json({ message: "Tax record not found" });
+      }
+      
+      res.json(taxRecord);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      console.error("Update tax record error:", error);
+      res.status(500).json({ message: "Failed to update tax record" });
+    }
+  });
+
+  app.delete("/api/financial/tax-records/:id", authenticate, authorize("store_manager"), async (req, res) => {
+    try {
+      const success = await storage.deleteTaxRecord(req.params.id);
+      if (!success) {
+        return res.status(404).json({ message: "Tax record not found" });
+      }
+      res.json({ message: "Tax record deleted successfully" });
+    } catch (error) {
+      console.error("Delete tax record error:", error);
+      res.status(500).json({ message: "Failed to delete tax record" });
+    }
+  });
+
+  // Financial analytics and summaries
+  app.get("/api/financial/summary", authenticate, authorize("staff"), async (req, res) => {
+    try {
+      const { startDate, endDate } = req.query;
+      const start = startDate ? new Date(startDate as string) : undefined;
+      const end = endDate ? new Date(endDate as string) : undefined;
+      
+      const summary = await storage.getPaymentSummary(start, end);
+      res.json(summary);
+    } catch (error) {
+      console.error("Get financial summary error:", error);
+      res.status(500).json({ message: "Failed to fetch financial summary" });
+    }
+  });
+
+  app.get("/api/financial/payment-summary", authenticate, authorize("staff"), async (req, res) => {
+    try {
+      const { startDate, endDate } = req.query;
+      const start = startDate ? new Date(startDate as string) : undefined;
+      const end = endDate ? new Date(endDate as string) : undefined;
+      
+      const summary = await storage.getPaymentSummary(start, end);
+      res.json(summary);
+    } catch (error) {
+      console.error("Get payment summary error:", error);
+      res.status(500).json({ message: "Failed to fetch payment summary" });
+    }
+  });
+
+  // Transaction status update endpoint
+  app.patch("/api/financial/transactions/:id/status", authenticate, authorize("staff"), async (req, res) => {
+    try {
+      const { status, failureReason } = req.body;
+      if (!status) {
+        return res.status(400).json({ message: "Status is required" });
+      }
+      
+      const success = await storage.updateTransactionStatus(req.params.id, status, failureReason);
+      if (!success) {
+        return res.status(404).json({ message: "Transaction not found" });
+      }
+      
+      res.json({ message: "Transaction status updated successfully" });
+    } catch (error) {
+      console.error("Update transaction status error:", error);
+      res.status(500).json({ message: "Failed to update transaction status" });
     }
   });
 
