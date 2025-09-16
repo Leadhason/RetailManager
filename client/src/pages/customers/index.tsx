@@ -52,22 +52,48 @@ export default function CustomersIndex() {
     });
   };
 
+  const sanitizeCSVField = (value: string | number | null | undefined): string => {
+    if (value === null || value === undefined) return "";
+    const stringValue = String(value);
+    
+    // Handle CSV injection: prevent formula injection by prefixing dangerous characters
+    let sanitized = stringValue;
+    if (/^[=+\-@\t]/.test(sanitized)) {
+      sanitized = "'" + sanitized; // Prefix with single quote to prevent formula execution
+    }
+    
+    // Escape double quotes by doubling them
+    sanitized = sanitized.replace(/"/g, '""');
+    
+    // Always wrap in double quotes for consistent CSV format
+    return `"${sanitized}"`;
+  };
+
   const handleExportCSV = () => {
+    if (customers.length === 0) {
+      toast({
+        title: "No Data to Export",
+        description: "There are no customers to export",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
-      // Create CSV content
+      // Create CSV content with proper escaping
       const headers = ["Name", "Email", "Company", "Type", "Phone", "Total Spent", "Order Count", "Status", "Joined Date"];
       const csvContent = [
-        headers.join(","),
+        headers.map(header => sanitizeCSVField(header)).join(","),
         ...customers.map(customer => [
-          `"${[customer.firstName, customer.lastName].filter(Boolean).join(' ') || 'No Name'}"`,
-          `"${customer.email || ''}"`,
-          `"${customer.company || ''}"`,
-          `"${customer.customerType}"`,
-          `"${customer.phone || ''}"`,
-          `"${Number(customer.totalSpent).toFixed(2)}"`,
-          `"${customer.orderCount}"`,
-          `"${customer.isActive ? 'Active' : 'Inactive'}"`,
-          `"${new Date(customer.createdAt).toLocaleDateString()}"`
+          sanitizeCSVField([customer.firstName, customer.lastName].filter(Boolean).join(' ') || 'No Name'),
+          sanitizeCSVField(customer.email || ''),
+          sanitizeCSVField(customer.company || ''),
+          sanitizeCSVField(customer.customerType),
+          sanitizeCSVField(customer.phone || ''),
+          Number(customer.totalSpent).toFixed(2), // Keep numeric values unquoted
+          String(customer.orderCount), // Keep numeric values unquoted
+          sanitizeCSVField(customer.isActive ? 'Active' : 'Inactive'),
+          sanitizeCSVField(new Date(customer.createdAt).toISOString().split('T')[0]) // Use ISO 8601 date format
         ].join(","))
       ].join("\n");
 
