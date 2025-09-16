@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
+import ImageUpload from "./image-upload";
 
 const productSchema = z.object({
   name: z.string().min(1, "Product name is required"),
@@ -23,18 +24,26 @@ const productSchema = z.object({
   msrp: z.string().optional(),
   weight: z.string().optional(),
   status: z.enum(["active", "inactive", "draft", "discontinued"]).default("active"),
+  images: z.array(z.string()).min(2, "At least 2 images are required").max(4, "Maximum 4 images allowed"),
 });
 
 type ProductFormData = z.infer<typeof productSchema>;
 
+interface ImageFile {
+  file: File;
+  preview: string;
+  id: string;
+}
+
 interface ProductFormProps {
-  onSubmit: (data: ProductFormData) => void;
+  onSubmit: (data: ProductFormData & { imageFiles?: ImageFile[] }) => void;
   initialData?: Partial<ProductFormData>;
   isLoading?: boolean;
 }
 
 export default function ProductForm({ onSubmit, initialData, isLoading }: ProductFormProps) {
   const { toast } = useToast();
+  const [imageFiles, setImageFiles] = useState<ImageFile[]>([]);
   
   const form = useForm<ProductFormData>({
     resolver: zodResolver(productSchema),
@@ -51,11 +60,31 @@ export default function ProductForm({ onSubmit, initialData, isLoading }: Produc
       msrp: initialData?.msrp || "",
       weight: initialData?.weight || "",
       status: initialData?.status || "active",
+      images: initialData?.images || [],
     },
   });
 
   const handleSubmit = (data: ProductFormData) => {
     try {
+      // Validate images
+      if (imageFiles.length < 2) {
+        toast({
+          title: "Images Required",
+          description: "Please upload at least 2 product images",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (imageFiles.length > 4) {
+        toast({
+          title: "Too Many Images",
+          description: "Please upload no more than 4 product images",
+          variant: "destructive",
+        });
+        return;
+      }
+
       // Auto-generate slug if not provided
       if (!data.slug && data.name) {
         data.slug = data.name
@@ -64,7 +93,8 @@ export default function ProductForm({ onSubmit, initialData, isLoading }: Produc
           .replace(/(^-|-$)/g, '');
       }
       
-      onSubmit(data);
+      // Include image files in submission
+      onSubmit({ ...data, imageFiles });
     } catch (error) {
       toast({
         title: "Validation Error",
@@ -72,6 +102,12 @@ export default function ProductForm({ onSubmit, initialData, isLoading }: Produc
         variant: "destructive",
       });
     }
+  };
+
+  const handleImagesChange = (images: ImageFile[]) => {
+    setImageFiles(images);
+    // Update form value for validation
+    form.setValue('images', images.map((_, index) => `temp-url-${index}`));
   };
 
   return (
@@ -233,6 +269,20 @@ export default function ProductForm({ onSubmit, initialData, isLoading }: Produc
               placeholder="0.00"
               data-testid="input-weight"
             />
+          </div>
+
+          {/* Product Images */}
+          <div className="space-y-2">
+            <Label>Product Images *</Label>
+            <ImageUpload
+              onImagesChange={handleImagesChange}
+              initialImages={initialData?.images}
+              maxImages={4}
+              minImages={2}
+            />
+            {form.formState.errors.images && (
+              <p className="text-sm text-destructive">{form.formState.errors.images.message}</p>
+            )}
           </div>
 
           {/* Submit Button */}
