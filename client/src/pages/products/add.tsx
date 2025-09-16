@@ -1,30 +1,56 @@
-import React from "react";
+import React, { useState } from "react";
 import { useCreateProduct } from "@/hooks/use-products";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import ProductForm from "@/components/products/product-form";
+import { uploadProductImages } from "@/services/image-upload";
 
 export default function AddProduct() {
   const createProduct = useCreateProduct();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (data: any) => {
+    if (isSubmitting) return;
+    
+    setIsSubmitting(true);
     try {
-      await createProduct.mutateAsync(data);
+      let imageUrls: string[] = [];
+      
+      // Upload images first if provided
+      if (data.imageFiles && data.imageFiles.length > 0) {
+        const uploadResult = await uploadProductImages(data.imageFiles);
+        imageUrls = uploadResult.imageUrls;
+      }
+
+      // Create product with image URLs
+      const productData = {
+        ...data,
+        images: imageUrls,
+      };
+      
+      // Remove imageFiles from the data before sending to API
+      delete productData.imageFiles;
+
+      await createProduct.mutateAsync(productData);
+      
       toast({
         title: "Success",
-        description: "Product created successfully",
+        description: "Product created successfully with images",
       });
       setLocation("/products");
     } catch (error) {
+      console.error("Product creation error:", error);
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : "Failed to create product",
         variant: "destructive",
       });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -52,7 +78,7 @@ export default function AddProduct() {
       {/* Product Form */}
       <ProductForm
         onSubmit={handleSubmit}
-        isLoading={createProduct.isPending}
+        isLoading={createProduct.isPending || isSubmitting}
       />
     </div>
   );
