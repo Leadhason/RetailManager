@@ -100,13 +100,9 @@ export default function OrdersIndex() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Orders</h1>
           <p className="text-muted-foreground">
-            Track and manage all customer orders
+            Track and manage all customer orders from your online store
           </p>
         </div>
-        <Button data-testid="create-order-button">
-          <Plus className="mr-2 h-4 w-4" />
-          Create Order
-        </Button>
       </div>
 
       {/* Stats Cards */}
