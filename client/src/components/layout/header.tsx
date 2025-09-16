@@ -9,7 +9,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Bell, Search, Sun, Moon, ChevronDown, User, LogOut, Menu } from "lucide-react";
+import { Search, Sun, Moon, ChevronDown, User, LogOut, Menu } from "lucide-react";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 
 interface HeaderProps {
   onMobileMenuToggle?: () => void;
@@ -59,12 +60,7 @@ export default function Header({ onMobileMenuToggle }: HeaderProps) {
           </Button>
 
           {/* Notifications */}
-          <Button variant="ghost" size="sm" className="relative min-w-10 min-h-10" data-testid="notifications-button">
-            <Bell className="w-4 h-4" />
-            <span className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground text-xs w-5 h-5 rounded-full flex items-center justify-center">
-              5
-            </span>
-          </Button>
+          <NotificationBell />
 
           {/* Theme Toggle */}
           <Button variant="ghost" size="sm" className="min-w-10 min-h-10" onClick={toggleTheme} data-testid="theme-toggle">

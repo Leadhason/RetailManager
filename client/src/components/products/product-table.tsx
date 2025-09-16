@@ -138,20 +138,22 @@ export default function ProductTable({
             {filteredProducts.length > 0 ? (
               filteredProducts.map((product) => (
                 <TableRow key={product.id} data-testid={`product-row-${product.id}`}>
-                  <TableCell>
+                  <TableCell className="max-w-xs">
                     <div>
-                      <div className="font-medium">{product.name}</div>
+                      <div className="font-medium truncate">{product.name}</div>
                       {product.shortDescription && (
-                        <div className="text-sm text-muted-foreground line-clamp-1">
+                        <div className="text-sm text-muted-foreground line-clamp-1 truncate">
                           {product.shortDescription}
                         </div>
                       )}
                     </div>
                   </TableCell>
-                  <TableCell className="hidden lg:table-cell font-mono text-sm">
-                    {product.sku || "—"}
+                  <TableCell className="hidden lg:table-cell font-mono text-sm max-w-24">
+                    <div className="truncate">{product.sku || "—"}</div>
                   </TableCell>
-                  <TableCell className="hidden xl:table-cell">{product.brand || "—"}</TableCell>
+                  <TableCell className="hidden xl:table-cell max-w-32">
+                    <div className="truncate">{product.brand || "—"}</div>
+                  </TableCell>
                   <TableCell className="font-medium">
                     {product.sellingPrice ? `${Number(product.sellingPrice).toFixed(2)}` : "—"}
                   </TableCell>
@@ -226,8 +228,8 @@ export default function ProductTable({
               data-testid={`product-card-${product.id}`}
             >
               <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <h3 className="font-medium text-base">{product.name}</h3>
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-medium text-base truncate">{product.name}</h3>
                   {product.shortDescription && (
                     <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
                       {product.shortDescription}
@@ -289,13 +291,13 @@ export default function ProductTable({
                 {product.sku && (
                   <div>
                     <span className="text-muted-foreground">SKU:</span>
-                    <div className="font-mono">{product.sku}</div>
+                    <div className="font-mono truncate">{product.sku}</div>
                   </div>
                 )}
                 {product.brand && (
                   <div>
                     <span className="text-muted-foreground">Brand:</span>
-                    <div>{product.brand}</div>
+                    <div className="truncate">{product.brand}</div>
                   </div>
                 )}
               </div>

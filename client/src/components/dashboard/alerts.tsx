@@ -1,41 +1,44 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { AlertTriangle, Info, CheckCircle } from "lucide-react";
-
-interface Alert {
-  id: string;
-  type: 'warning' | 'info' | 'success';
-  title: string;
-  message: string;
-  time: string;
-}
+import { useNotifications } from "@/contexts/notification-context";
 
 export default function Alerts() {
-  // Sample alerts - in a real app, this would come from props or API
-  const alerts: Alert[] = [
-    {
-      id: "1",
-      type: "warning",
-      title: "Low Stock Alert",
-      message: "Professional Drill Set is running low (5 units left)",
-      time: "2 hours ago"
-    },
-    {
-      id: "2",
-      type: "info",
-      title: "New Order Received",
-      message: "Order #ORD-2024-004 for GHS 156.99 requires review",
-      time: "15 minutes ago"
-    },
-    {
-      id: "3",
-      type: "success",
-      title: "Payment Received",
-      message: "Payment for Order #ORD-2024-001 has been processed",
-      time: "1 hour ago"
+  const { notifications, addNotification } = useNotifications();
+  
+  // Add sample notifications on component mount
+  useEffect(() => {
+    if (notifications.length === 0) {
+      // Add some demo notifications
+      addNotification({
+        type: "warning",
+        title: "Low Stock Alert",
+        message: "Professional Drill Set is running low (5 units left)",
+        persistent: true,
+        actionLabel: "View Inventory",
+        actionUrl: "/inventory"
+      });
+      
+      addNotification({
+        type: "info",
+        title: "New Order Received",
+        message: "Order #ORD-2024-004 for GHS 156.99 requires review",
+        persistent: true,
+        actionLabel: "View Order",
+        actionUrl: "/orders"
+      });
+      
+      addNotification({
+        type: "success",
+        title: "Payment Received",
+        message: "Payment for Order #ORD-2024-001 has been processed",
+        persistent: true
+      });
     }
-  ];
+  }, [addNotification, notifications.length]);
+  
+  // Get recent notifications for dashboard display
+  const recentNotifications = notifications.slice(0, 3);
 
   const getAlertIcon = (type: string) => {
     switch (type) {
@@ -83,32 +86,40 @@ export default function Alerts() {
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
-          {alerts.map((alert) => (
+          {recentNotifications.map((notification) => (
             <div 
-              key={alert.id} 
-              className={`p-3 border rounded-lg ${getAlertBg(alert.type)}`}
-              data-testid={`alert-${alert.id}`}
+              key={notification.id} 
+              className={`p-3 border rounded-lg ${getAlertBg(notification.type)}`}
+              data-testid={`alert-${notification.id}`}
             >
               <div className="flex items-start space-x-2">
-                {getAlertIcon(alert.type)}
+                {getAlertIcon(notification.type)}
                 <div className="flex-1">
-                  <p className={`text-sm font-medium ${getAlertTextColor(alert.type)}`}>
-                    {alert.title}
+                  <p className={`text-sm font-medium ${getAlertTextColor(notification.type)}`}>
+                    {notification.title}
                   </p>
-                  <p className={`text-xs ${getAlertTextColor(alert.type)} opacity-80`}>
-                    {alert.message}
+                  <p className={`text-xs ${getAlertTextColor(notification.type)} opacity-80`}>
+                    {notification.message}
                   </p>
-                  <p className={`text-xs ${getAlertTextColor(alert.type)} opacity-60 mt-1`}>
-                    {alert.time}
+                  <p className={`text-xs ${getAlertTextColor(notification.type)} opacity-60 mt-1`}>
+                    {new Date(notification.timestamp).toLocaleString()}
                   </p>
                 </div>
               </div>
             </div>
           ))}
+          {recentNotifications.length === 0 && (
+            <div className="text-center py-8 text-muted-foreground">
+              <Info className="w-8 h-8 mx-auto mb-2 opacity-50" />
+              <p>No recent notifications</p>
+            </div>
+          )}
         </div>
-        <Button variant="outline" className="w-full mt-4" data-testid="view-all-notifications">
-          View All Notifications
-        </Button>
+        <div className="mt-4 text-center">
+          <p className="text-sm text-muted-foreground">
+            Click the notification bell in the header to view all notifications
+          </p>
+        </div>
       </CardContent>
     </Card>
   );
