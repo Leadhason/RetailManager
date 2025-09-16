@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { useOrders, useUpdateOrderStatus } from "@/hooks/use-orders";
+import { useOrders } from "@/hooks/use-orders";
 import { useToast } from "@/hooks/use-toast";
 import { ShoppingCart, Clock, Truck, CheckCircle } from "lucide-react";
 import OrderTable from "@/components/orders/order-table";
@@ -10,7 +10,6 @@ import type { Order } from "@shared/schema";
 
 export default function OrdersIndex() {
   const { data: orders = [], isLoading, error, refetch } = useOrders();
-  const updateOrderStatus = useUpdateOrderStatus();
   const { toast } = useToast();
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
@@ -20,52 +19,9 @@ export default function OrdersIndex() {
     setIsPopoverOpen(true);
   };
 
-  const handleView = (order: Order) => {
-    handleRowClick(order);
-  };
 
-  const handleEdit = (order: Order) => {
-    toast({
-      title: "Edit Order",
-      description: `Editing ${order.orderNumber} (feature coming soon)`,
-    });
-  };
-
-  const handleUpdateStatus = async (order: Order) => {
-    // Simple status progression for demo
-    const statusFlow = {
-      'pending': 'processing',
-      'processing': 'shipped',
-      'shipped': 'delivered'
-    };
-
-    const nextStatus = statusFlow[order.status as keyof typeof statusFlow];
-    
-    if (nextStatus) {
-      try {
-        await updateOrderStatus.mutateAsync({
-          id: order.id,
-          status: nextStatus,
-          comment: `Status updated to ${nextStatus}`
-        });
-        toast({
-          title: "Success",
-          description: `Order status updated to ${nextStatus}`,
-        });
-      } catch (error) {
-        toast({
-          title: "Error",
-          description: "Failed to update order status",
-          variant: "destructive",
-        });
-      }
-    } else {
-      toast({
-        title: "Info",
-        description: "No further status updates available for this order",
-      });
-    }
-  };
+  // Removed edit and update status handlers since this is a read-only interface
+  // Orders are managed through the online store, not manually here
 
   if (error) {
     return (
@@ -176,9 +132,6 @@ export default function OrdersIndex() {
         <CardContent>
           <OrderTable
             orders={orders}
-            onView={handleView}
-            onEdit={handleEdit}
-            onUpdateStatus={handleUpdateStatus}
             onRowClick={handleRowClick}
             isLoading={isLoading}
           />

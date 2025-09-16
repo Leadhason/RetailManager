@@ -32,6 +32,10 @@ export function useOrder(id: string) {
   return useQuery({
     queryKey: ["/api/orders", id],
     queryFn: async () => {
+      if (!id) {
+        throw new Error("Order ID is required");
+      }
+      
       const response = await fetch(`/api/orders/${id}`, {
         headers: getAuthHeaders(),
       });
@@ -42,7 +46,7 @@ export function useOrder(id: string) {
       
       return response.json();
     },
-    enabled: !!id,
+    enabled: !!id, // Only run query when id is provided
     refetchInterval: 30000, // Refetch every 30 seconds for real-time updates
     refetchIntervalInBackground: true, // Keep refetching even when tab is not active
     refetchOnWindowFocus: true, // Refetch when user focuses on the tab

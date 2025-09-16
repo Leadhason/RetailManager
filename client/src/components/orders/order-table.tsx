@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -10,22 +9,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Search, MoreHorizontal, Edit, Eye, Truck } from "lucide-react";
+import { Search } from "lucide-react";
 import type { Order } from "@shared/schema";
 
 interface OrderTableProps {
   orders: Order[];
-  onView?: (order: Order) => void;
-  onEdit?: (order: Order) => void;
-  onUpdateStatus?: (order: Order) => void;
+  onRowClick: (order: Order) => void;
   isLoading?: boolean;
-  onRowClick?: (order: Order) => void;
 }
 
 const getStatusColor = (status: string) => {
@@ -64,9 +54,6 @@ const getPaymentStatusColor = (status: string) => {
 
 export default function OrderTable({ 
   orders, 
-  onView, 
-  onEdit, 
-  onUpdateStatus,
   isLoading,
   onRowClick 
 }: OrderTableProps) {
@@ -99,7 +86,6 @@ export default function OrderTable({
                 <TableHead>Status</TableHead>
                 <TableHead>Payment</TableHead>
                 <TableHead>Date</TableHead>
-                <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -111,7 +97,6 @@ export default function OrderTable({
                   <TableCell><div className="h-6 bg-muted rounded w-16 animate-pulse" /></TableCell>
                   <TableCell><div className="h-6 bg-muted rounded w-16 animate-pulse" /></TableCell>
                   <TableCell><div className="h-4 bg-muted rounded w-20 animate-pulse" /></TableCell>
-                  <TableCell><div className="h-8 bg-muted rounded w-8 animate-pulse" /></TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -151,7 +136,6 @@ export default function OrderTable({
               <TableHead>Status</TableHead>
               <TableHead>Payment</TableHead>
               <TableHead>Date</TableHead>
-              <TableHead className="w-12"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -185,45 +169,11 @@ export default function OrderTable({
                   <TableCell className="text-sm text-muted-foreground">
                     {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : 'N/A'}
                   </TableCell>
-                  <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          className="h-8 w-8 p-0"
-                          data-testid={`order-actions-${order.id}`}
-                        >
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        {onView && (
-                          <DropdownMenuItem onClick={() => onView(order)}>
-                            <Eye className="mr-2 h-4 w-4" />
-                            View Details
-                          </DropdownMenuItem>
-                        )}
-                        {onEdit && (
-                          <DropdownMenuItem onClick={() => onEdit(order)}>
-                            <Edit className="mr-2 h-4 w-4" />
-                            Edit Order
-                          </DropdownMenuItem>
-                        )}
-                        {onUpdateStatus && (
-                          <DropdownMenuItem onClick={() => onUpdateStatus(order)}>
-                            <Truck className="mr-2 h-4 w-4" />
-                            Update Status
-                          </DropdownMenuItem>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
                 </TableRow>
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-8">
+                <TableCell colSpan={6} className="text-center py-8">
                   <div className="text-muted-foreground">
                     {searchTerm ? "No orders found matching your search" : "No orders available"}
                   </div>
