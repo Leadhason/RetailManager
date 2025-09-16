@@ -9,6 +9,10 @@ export const orderStatusEnum = pgEnum("order_status", ["pending", "processing", 
 export const paymentStatusEnum = pgEnum("payment_status", ["pending", "paid", "failed", "refunded"]);
 export const productStatusEnum = pgEnum("product_status", ["active", "inactive", "draft", "discontinued"]);
 export const customerTypeEnum = pgEnum("customer_type", ["retail", "wholesale", "vip"]);
+export const transactionTypeEnum = pgEnum("transaction_type", ["payment", "refund", "fee", "adjustment"]);
+export const transactionStatusEnum = pgEnum("transaction_status", ["pending", "processing", "completed", "failed", "cancelled"]);
+export const receiptStatusEnum = pgEnum("receipt_status", ["generated", "sent", "viewed"]);
+export const taxTypeEnum = pgEnum("tax_type", ["VAT", "Income Tax", "PAYE", "NHIL", "GETFUND"]);
 
 // Users table for admin authentication
 export const users = pgTable("users", {
@@ -282,6 +286,65 @@ export const reorderRules = pgTable("reorder_rules", {
   locationRuleUnique: sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_reorder_rules_location ON reorder_rules (product_id, location_id) WHERE location_id IS NOT NULL`
 }));
 
+// Payment Transactions
+export const transactions = pgTable("transactions", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  orderId: uuid("order_id").references(() => orders.id),
+  customerId: uuid("customer_id").references(() => customers.id),
+  type: transactionTypeEnum("type").notNull(),
+  status: transactionStatusEnum("status").default("pending"),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  currency: varchar("currency", { length: 3 }).default("GHS"),
+  paymentMethod: varchar("payment_method", { length: 50 }).notNull(),
+  paymentProvider: varchar("payment_provider", { length: 50 }),
+  reference: varchar("reference", { length: 100 }).unique().notNull(),
+  externalReference: varchar("external_reference", { length: 100 }),
+  gatewayResponse: jsonb("gateway_response"),
+  fees: decimal("fees", { precision: 10, scale: 2 }).default("0"),
+  netAmount: decimal("net_amount", { precision: 10, scale: 2 }),
+  notes: text("notes"),
+  failureReason: text("failure_reason"),
+  refundedAmount: decimal("refunded_amount", { precision: 10, scale: 2 }).default("0"),
+  processedAt: timestamp("processed_at"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`)
+});
+
+// Payment Receipts
+export const receipts = pgTable("receipts", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  transactionId: uuid("transaction_id").references(() => transactions.id).notNull(),
+  orderId: uuid("order_id").references(() => orders.id).notNull(),
+  customerId: uuid("customer_id").references(() => customers.id).notNull(),
+  receiptNumber: varchar("receipt_number", { length: 100 }).unique().notNull(),
+  status: receiptStatusEnum("status").default("generated"),
+  receiptData: jsonb("receipt_data").notNull(), // Contains full receipt details
+  pdfPath: text("pdf_path"),
+  emailSentAt: timestamp("email_sent_at"),
+  viewedAt: timestamp("viewed_at"),
+  printedAt: timestamp("printed_at"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`)
+});
+
+// Tax Records
+export const taxRecords = pgTable("tax_records", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  period: varchar("period", { length: 50 }).notNull(), // e.g., "2024-01", "Q1-2024"
+  taxType: taxTypeEnum("tax_type").notNull(),
+  status: varchar("status", { length: 20 }).default("pending"), // pending, filed, paid, overdue
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  paidAmount: decimal("paid_amount", { precision: 10, scale: 2 }).default("0"),
+  dueDate: timestamp("due_date").notNull(),
+  filedDate: timestamp("filed_date"),
+  paidDate: timestamp("paid_date"),
+  taxCalculation: jsonb("tax_calculation"), // Detailed breakdown
+  filingReference: varchar("filing_reference", { length: 100 }),
+  notes: text("notes"),
+  createdBy: uuid("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`)
+});
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true, updatedAt: true, lastLogin: true });
 export const insertCategorySchema = createInsertSchema(categories).omit({ id: true, createdAt: true, updatedAt: true });
@@ -296,6 +359,9 @@ export const insertEmailCampaignSchema = createInsertSchema(emailCampaigns).omit
 export const insertPurchaseOrderSchema = createInsertSchema(purchaseOrders).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertInventoryMovementSchema = createInsertSchema(inventoryMovements).omit({ id: true, createdAt: true });
 export const insertReorderRuleSchema = createInsertSchema(reorderRules).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertTransactionSchema = createInsertSchema(transactions).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertReceiptSchema = createInsertSchema(receipts).omit({ id: true, createdAt: true });
+export const insertTaxRecordSchema = createInsertSchema(taxRecords).omit({ id: true, createdAt: true, updatedAt: true });
 
 // Types
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -324,6 +390,12 @@ export type InsertInventoryMovement = z.infer<typeof insertInventoryMovementSche
 export type InventoryMovement = typeof inventoryMovements.$inferSelect;
 export type InsertReorderRule = z.infer<typeof insertReorderRuleSchema>;
 export type ReorderRule = typeof reorderRules.$inferSelect;
+export type InsertTransaction = z.infer<typeof insertTransactionSchema>;
+export type Transaction = typeof transactions.$inferSelect;
+export type InsertReceipt = z.infer<typeof insertReceiptSchema>;
+export type Receipt = typeof receipts.$inferSelect;
+export type InsertTaxRecord = z.infer<typeof insertTaxRecordSchema>;
+export type TaxRecord = typeof taxRecords.$inferSelect;
 
 // Dashboard metrics type
 export interface DashboardMetrics {
