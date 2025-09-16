@@ -1,0 +1,16 @@
+[build.environment]
+  SECRETS_SCAN_OMIT_KEYS = "VITE_SUPABASE_URL,VITE_SUPABASE_ANON_KEY,NODE_ENV"
+[build]
+  command = "npm run build:frontend"
+  publish = "dist/public"
+
+[functions]
+  directory = "dist/functions"
+
+[build.environment]
+  SECRETS_SCAN_OMIT_KEYS = "VITE_SUPABASE_URL,VITE_SUPABASE_ANON_KEY,NODE_ENV"
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api/:splat"
+  status = 200
