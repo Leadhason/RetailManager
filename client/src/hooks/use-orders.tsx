@@ -20,6 +20,11 @@ export function useOrders(limit?: number, offset?: number) {
       
       return response.json();
     },
+    refetchInterval: 30000, // Refetch every 30 seconds for real-time updates
+    refetchIntervalInBackground: true, // Keep refetching even when tab is not active
+    refetchOnWindowFocus: true, // Refetch when user focuses on the tab
+    refetchOnMount: true, // Always refetch when component mounts
+    staleTime: 0, // Consider data stale immediately to ensure fresh data
   });
 }
 
@@ -38,6 +43,11 @@ export function useOrder(id: string) {
       return response.json();
     },
     enabled: !!id,
+    refetchInterval: 30000, // Refetch every 30 seconds for real-time updates
+    refetchIntervalInBackground: true, // Keep refetching even when tab is not active
+    refetchOnWindowFocus: true, // Refetch when user focuses on the tab
+    refetchOnMount: true, // Always refetch when component mounts
+    staleTime: 0, // Consider data stale immediately to ensure fresh data
   });
 }
 
