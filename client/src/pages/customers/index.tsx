@@ -134,7 +134,7 @@ export default function CustomersIndex() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Customers</h1>
           <p className="text-muted-foreground">
-            Manage customer relationships and track engagement
+            Customer data automatically synced from your online store
           </p>
         </div>
         <Button 
@@ -220,7 +220,7 @@ export default function CustomersIndex() {
         <CardHeader>
           <CardTitle>Customer Database</CardTitle>
           <CardDescription>
-            View and manage all customer information and interactions
+            View customer data automatically imported from your online store
           </CardDescription>
         </CardHeader>
         <CardContent>
