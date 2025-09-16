@@ -14,9 +14,11 @@ import {
   DollarSign,
   Settings,
   ChevronDown,
-  Bolt,
-  Menu
+  ChevronLeft,
+  ChevronRight,
+  Bolt
 } from "lucide-react";
+import { useAuth } from "@/hooks/use-auth";
 
 interface SidebarProps {
   collapsed: boolean;
@@ -114,6 +116,11 @@ function NavItemComponent({
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const hasChildren = item.children && item.children.length > 0;
+  const [location] = useLocation();
+  
+  // Check if any child is active
+  const isChildActive = hasChildren && item.children?.some(child => location === child.href);
+  const shouldHighlight = isActive || isChildActive;
 
   const handleClick = () => {
     if (hasChildren && !collapsed) {
@@ -126,17 +133,21 @@ function NavItemComponent({
   const ItemContent = () => (
     <div 
       className={cn(
-        "flex items-center justify-between w-full p-3 rounded-lg cursor-pointer transition-colors",
-        isActive 
-          ? "bg-primary text-primary-foreground" 
-          : "hover:bg-accent text-muted-foreground hover:text-foreground"
+        "flex items-center justify-between w-full p-3 rounded-lg cursor-pointer transition-all duration-200",
+        shouldHighlight 
+          ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm" 
+          : "hover:bg-sidebar-accent text-sidebar-foreground/70 hover:text-sidebar-foreground"
       )}
       onClick={handleClick}
       data-testid={`nav-item-${item.title.toLowerCase().replace(/\s+/g, '-')}`}
     >
-      <div className="flex items-center space-x-3">
-        <item.icon className="w-5 h-5" />
-        {!collapsed && <span className="font-medium">{item.title}</span>}
+      <div className="flex items-center space-x-3 min-w-0">
+        <item.icon className="w-5 h-5 flex-shrink-0" />
+        {!collapsed && (
+          <span className="font-medium truncate transition-opacity duration-200">
+            {item.title}
+          </span>
+        )}
       </div>
       {!collapsed && (
         <>
@@ -169,17 +180,25 @@ function NavItemComponent({
       )}
       
       {hasChildren && !collapsed && isExpanded && (
-        <div className="ml-8 mt-1 space-y-1">
-          {item.children!.map((child) => (
-            <Link key={child.href} href={child.href!}>
-              <div 
-                className="flex items-center space-x-3 p-3 rounded hover:bg-accent cursor-pointer text-sm text-muted-foreground hover:text-foreground"
-                onClick={onLinkClick}
-              >
-                <span>{child.title}</span>
-              </div>
-            </Link>
-          ))}
+        <div className="ml-8 mt-1 space-y-1 animate-in slide-in-from-top-1 duration-200">
+          {item.children!.map((child) => {
+            const isChildItemActive = location === child.href;
+            return (
+              <Link key={child.href} href={child.href!}>
+                <div 
+                  className={cn(
+                    "flex items-center space-x-3 p-2 px-3 rounded transition-all duration-200 text-sm cursor-pointer",
+                    isChildItemActive
+                      ? "bg-sidebar-primary/10 text-sidebar-primary border-l-2 border-sidebar-primary"
+                      : "text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
+                  )}
+                  onClick={onLinkClick}
+                >
+                  <span className="truncate">{child.title}</span>
+                </div>
+              </Link>
+            );
+          })}
         </div>
       )}
     </div>
@@ -188,38 +207,48 @@ function NavItemComponent({
 
 export default function Sidebar({ collapsed, onToggle, onLinkClick }: SidebarProps) {
   const [location] = useLocation();
+  const { user } = useAuth();
 
   return (
     <aside 
       className={cn(
-        "bg-card border-r border-border flex-shrink-0 transition-all duration-300 ease-in-out h-full",
+        "bg-sidebar border-r border-sidebar-border flex-shrink-0 transition-all duration-300 ease-in-out h-full shadow-lg",
         collapsed ? "w-16" : "w-64"
       )}
       data-testid="sidebar"
     >
       <div className="flex flex-col h-full">
         {/* Header */}
-        <div className="p-4 border-b border-border">
+        <div className="p-4 border-b border-sidebar-border">
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                <Bolt className="w-4 h-4 text-primary-foreground" />
+            <div className="flex items-center space-x-3 min-w-0">
+              <div className="w-8 h-8 bg-sidebar-primary rounded-lg flex items-center justify-center flex-shrink-0">
+                <Bolt className="w-5 h-5 text-sidebar-primary-foreground" />
               </div>
-              {!collapsed && <span className="font-bold text-lg">EDMAX</span>}
+              {!collapsed && (
+                <span className="font-bold text-lg text-sidebar-foreground truncate transition-opacity duration-200">
+                  EDMAX
+                </span>
+              )}
             </div>
             <Button
               variant="ghost"
               size="sm"
               onClick={onToggle}
+              className="text-sidebar-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent flex-shrink-0"
               data-testid="sidebar-toggle"
             >
-              <Menu className="w-4 h-4" />
+              {collapsed ? (
+                <ChevronRight className="w-4 h-4" />
+              ) : (
+                <ChevronLeft className="w-4 h-4" />
+              )}
             </Button>
           </div>
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+        <nav className="flex-1 p-4 space-y-1 overflow-y-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-sidebar-border">
           {navItems.map((item) => (
             <NavItemComponent
               key={item.title}
@@ -233,19 +262,28 @@ export default function Sidebar({ collapsed, onToggle, onLinkClick }: SidebarPro
         </nav>
 
         {/* User Profile */}
-        {!collapsed && (
-          <div className="p-4 border-t border-border">
-            <div className="flex items-center space-x-3">
-              <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
-                <span className="text-primary-foreground text-sm font-medium">JD</span>
-              </div>
-              <div>
-                <div className="text-sm font-medium">John Doe</div>
-                <div className="text-xs text-muted-foreground">Store Manager</div>
-              </div>
+        <div className="p-4 border-t border-sidebar-border">
+          <div className="flex items-center space-x-3 min-w-0">
+            <div className="w-8 h-8 bg-sidebar-primary rounded-full flex items-center justify-center flex-shrink-0">
+              <span className="text-sidebar-primary-foreground text-sm font-medium">
+                {user?.firstName?.[0] || user?.email?.[0] || 'U'}
+              </span>
             </div>
+            {!collapsed && (
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-medium text-sidebar-foreground truncate">
+                  {user?.firstName && user?.lastName 
+                    ? `${user.firstName} ${user.lastName}`
+                    : user?.email || 'User'
+                  }
+                </div>
+                <div className="text-xs text-sidebar-foreground/60 truncate">
+                  {user?.role || 'Store Manager'}
+                </div>
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
     </aside>
   );

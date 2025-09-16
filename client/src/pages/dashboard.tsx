@@ -70,26 +70,46 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="space-y-8" data-testid="dashboard">
+    <div className="space-y-6 md:space-y-8" data-testid="dashboard">
+      {/* Welcome Section */}
+      <div className="mb-6">
+        <h2 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground mb-2">
+          Welcome back! 👋
+        </h2>
+        <p className="text-muted-foreground text-sm md:text-base">
+          Here's what's happening with your store today
+        </p>
+      </div>
+
       {/* KPI Cards */}
-      <KPICards metrics={metrics} />
+      <div className="mb-8">
+        <KPICards metrics={metrics} />
+      </div>
 
       {/* Charts and Analytics */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <SalesChart data={metrics.salesData} />
-        <TopProducts products={metrics.topProducts} />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 mb-8">
+        <div className="space-y-4">
+          <SalesChart data={metrics.salesData} />
+        </div>
+        <div className="space-y-4">
+          <TopProducts products={metrics.topProducts} />
+        </div>
       </div>
 
       {/* Recent Orders and Alerts */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 mb-8">
         <div className="lg:col-span-2">
           <RecentOrders orders={metrics.recentOrders} />
         </div>
-        <Alerts />
+        <div>
+          <Alerts />
+        </div>
       </div>
 
       {/* Quick Actions */}
-      <QuickActions />
+      <div>
+        <QuickActions />
+      </div>
     </div>
   );
 }

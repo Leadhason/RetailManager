@@ -21,7 +21,7 @@ export default function Header({ onMobileMenuToggle }: HeaderProps) {
   const { user, logout } = useAuth();
 
   return (
-    <header className="bg-card border-b border-border p-4" data-testid="header">
+    <header className="bg-card border-b border-border p-4 shadow-sm" data-testid="header">
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
           {/* Mobile Menu Button */}
@@ -35,10 +35,12 @@ export default function Header({ onMobileMenuToggle }: HeaderProps) {
             <Menu className="w-5 h-5" />
           </Button>
           
-          <h1 className="text-xl md:text-2xl font-bold">Dashboard</h1>
-          <div className="hidden sm:flex items-center space-x-2 text-sm text-muted-foreground">
-            <span>Last updated:</span>
-            <span>2 minutes ago</span>
+          <div className="flex flex-col">
+            <h1 className="text-lg md:text-xl font-bold text-foreground">Dashboard</h1>
+            <div className="hidden sm:flex items-center space-x-2 text-xs text-muted-foreground">
+              <span>Last updated:</span>
+              <span className="font-medium">2 minutes ago</span>
+            </div>
           </div>
         </div>
 
@@ -49,7 +51,7 @@ export default function Header({ onMobileMenuToggle }: HeaderProps) {
             <Input
               type="search"
               placeholder="Search products, orders, customers..."
-              className="pl-10 w-48 md:w-64"
+              className="pl-10 w-48 md:w-64 bg-background/50 border-border/50 focus:bg-background transition-colors"
               data-testid="search-input"
             />
           </div>
@@ -70,13 +72,13 @@ export default function Header({ onMobileMenuToggle }: HeaderProps) {
           {/* User Menu */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="flex items-center space-x-2 min-h-10" data-testid="user-menu">
-                <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
+              <Button variant="ghost" className="flex items-center space-x-2 min-h-10 hover:bg-accent/50 transition-colors" data-testid="user-menu">
+                <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center shadow-sm">
                   <span className="text-primary-foreground text-sm font-medium">
                     {user?.firstName?.[0] || user?.email?.[0] || 'U'}
                   </span>
                 </div>
-                <ChevronDown className="hidden sm:block w-4 h-4" />
+                <ChevronDown className="hidden sm:block w-4 h-4 text-muted-foreground" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">

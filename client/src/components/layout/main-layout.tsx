@@ -12,8 +12,19 @@ interface MainLayoutProps {
 export default function MainLayout({ children }: MainLayoutProps) {
   const { user, isLoading } = useAuth();
   const [, setLocation] = useLocation();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    // Load collapsed state from localStorage
+    const saved = localStorage.getItem('sidebar-collapsed');
+    return saved === 'true';
+  });
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Persist sidebar collapsed state
+  const toggleSidebar = () => {
+    const newCollapsed = !sidebarCollapsed;
+    setSidebarCollapsed(newCollapsed);
+    localStorage.setItem('sidebar-collapsed', newCollapsed.toString());
+  };
 
   // Redirect to login if not authenticated
   React.useEffect(() => {
@@ -40,7 +51,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
       <div className="hidden md:flex">
         <Sidebar 
           collapsed={sidebarCollapsed} 
-          onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+          onToggle={toggleSidebar}
         />
       </div>
       

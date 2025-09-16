@@ -48,27 +48,35 @@ export default function KPICards({ metrics }: KPICardsProps) {
   ];
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
       {cards.map((card) => (
-        <Card key={card.title} data-testid={`kpi-card-${card.title.toLowerCase().replace(/\s+/g, '-')}`}>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">{card.title}</p>
-                <p className="text-3xl font-bold">{card.value}</p>
-                <p className={`text-sm mt-1 flex items-center ${
-                  card.trend === "up" ? "text-green-600" : 
-                  card.trend === "down" ? "text-red-600" : 
-                  "text-orange-600"
+        <Card 
+          key={card.title} 
+          className="transition-all duration-200 hover:shadow-md border-border/50"
+          data-testid={`kpi-card-${card.title.toLowerCase().replace(/\s+/g, '-')}`}
+        >
+          <CardContent className="p-4 md:p-6">
+            <div className="flex items-start justify-between">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs md:text-sm font-medium text-muted-foreground mb-1 truncate">
+                  {card.title}
+                </p>
+                <p className="text-xl md:text-2xl lg:text-3xl font-bold text-foreground tracking-tight">
+                  {card.value}
+                </p>
+                <p className={`text-xs md:text-sm mt-2 flex items-center font-medium ${
+                  card.trend === "up" ? "text-green-600 dark:text-green-400" : 
+                  card.trend === "down" ? "text-red-600 dark:text-red-400" : 
+                  "text-orange-600 dark:text-orange-400"
                 }`}>
-                  {card.trend === "up" && <TrendingUp className="w-4 h-4 mr-1" />}
-                  {card.trend === "down" && <TrendingDown className="w-4 h-4 mr-1" />}
-                  {card.trend === "warning" && <AlertTriangle className="w-4 h-4 mr-1" />}
-                  {card.change}
+                  {card.trend === "up" && <TrendingUp className="w-3 h-3 md:w-4 md:h-4 mr-1 flex-shrink-0" />}
+                  {card.trend === "down" && <TrendingDown className="w-3 h-3 md:w-4 md:h-4 mr-1 flex-shrink-0" />}
+                  {card.trend === "warning" && <AlertTriangle className="w-3 h-3 md:w-4 md:h-4 mr-1 flex-shrink-0" />}
+                  <span className="truncate">{card.change}</span>
                 </p>
               </div>
-              <div className={`w-12 h-12 ${card.bgColor} rounded-full flex items-center justify-center`}>
-                <span className="text-2xl">{card.icon}</span>
+              <div className={`w-10 h-10 md:w-12 md:h-12 ${card.bgColor} rounded-xl flex items-center justify-center flex-shrink-0 ml-3`}>
+                <span className="text-lg md:text-2xl">{card.icon}</span>
               </div>
             </div>
           </CardContent>
