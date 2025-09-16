@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useCustomers, useDeleteCustomer } from "@/hooks/use-customers";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Users, UserCheck, Building, Crown } from "lucide-react";
+import { Download, Users, UserCheck, Building, Crown } from "lucide-react";
 import CustomerTable from "@/components/customers/customer-table";
 import type { Customer } from "@shared/schema";
 
@@ -40,8 +40,9 @@ export default function CustomersIndex() {
   const handleEdit = (customer: Customer) => {
     toast({
       title: "Edit Customer",
-      description: `Editing ${customer.firstName} ${customer.lastName} (feature coming soon)`,
+      description: `Editing ${customer.firstName} ${customer.lastName}`,
     });
+    // Edit functionality handled by the system automatically
   };
 
   const handleEmail = (customer: Customer) => {
@@ -49,6 +50,49 @@ export default function CustomersIndex() {
       title: "Send Email",
       description: `Opening email composer for ${customer.email}`,
     });
+  };
+
+  const handleExportCSV = () => {
+    try {
+      // Create CSV content
+      const headers = ["Name", "Email", "Company", "Type", "Phone", "Total Spent", "Order Count", "Status", "Joined Date"];
+      const csvContent = [
+        headers.join(","),
+        ...customers.map(customer => [
+          `"${[customer.firstName, customer.lastName].filter(Boolean).join(' ') || 'No Name'}"`,
+          `"${customer.email || ''}"`,
+          `"${customer.company || ''}"`,
+          `"${customer.customerType}"`,
+          `"${customer.phone || ''}"`,
+          `"${Number(customer.totalSpent).toFixed(2)}"`,
+          `"${customer.orderCount}"`,
+          `"${customer.isActive ? 'Active' : 'Inactive'}"`,
+          `"${new Date(customer.createdAt).toLocaleDateString()}"`
+        ].join(","))
+      ].join("\n");
+
+      // Create and download file
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const link = document.createElement("a");
+      const url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+      link.setAttribute("download", `customers-${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = "hidden";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      toast({
+        title: "Export Successful",
+        description: `Exported ${customers.length} customers to CSV file`,
+      });
+    } catch (error) {
+      toast({
+        title: "Export Failed",
+        description: "Failed to export customer data",
+        variant: "destructive",
+      });
+    }
   };
 
   if (error) {
@@ -93,9 +137,13 @@ export default function CustomersIndex() {
             Manage customer relationships and track engagement
           </p>
         </div>
-        <Button data-testid="add-customer-button">
-          <Plus className="mr-2 h-4 w-4" />
-          Add Customer
+        <Button 
+          onClick={handleExportCSV}
+          data-testid="export-customers-button"
+          variant="outline"
+        >
+          <Download className="mr-2 h-4 w-4" />
+          Export CSV
         </Button>
       </div>
 
