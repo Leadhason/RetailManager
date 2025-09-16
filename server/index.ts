@@ -1,7 +1,11 @@
+
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { storage } from "./storage";
+import dotenv from "dotenv";
+
+dotenv.config();
 import { initializeStorageBucket } from "./supabase";
 
 // Handle TLS certificate issues in development
