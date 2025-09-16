@@ -24,7 +24,7 @@ const productSchema = z.object({
   msrp: z.string().optional(),
   weight: z.string().optional(),
   status: z.enum(["active", "inactive", "draft", "discontinued"]).default("active"),
-  images: z.array(z.string()).min(2, "At least 2 images are required").max(4, "Maximum 4 images allowed"),
+  images: z.array(z.string()).optional(),
 });
 
 type ProductFormData = z.infer<typeof productSchema>;

@@ -18,24 +18,33 @@ export default function AddProduct() {
     
     setIsSubmitting(true);
     try {
-      let imageUrls: string[] = [];
-      
-      // Upload images first if provided
-      if (data.imageFiles && data.imageFiles.length > 0) {
-        const uploadResult = await uploadProductImages(data.imageFiles);
-        imageUrls = uploadResult.imageUrls;
+      // Validate minimum images requirement
+      if (!data.imageFiles || data.imageFiles.length < 2) {
+        toast({
+          title: "Error",
+          description: "At least 2 product images are required",
+          variant: "destructive",
+        });
+        return;
       }
 
-      // Create product with image URLs
-      const productData = {
-        ...data,
-        images: imageUrls,
-      };
-      
-      // Remove imageFiles from the data before sending to API
-      delete productData.imageFiles;
+      if (data.imageFiles.length > 4) {
+        toast({
+          title: "Error", 
+          description: "Maximum 4 product images allowed",
+          variant: "destructive",
+        });
+        return;
+      }
 
-      await createProduct.mutateAsync(productData);
+      // Create product first without images
+      const productData = { ...data };
+      delete productData.imageFiles; // Remove image files from product data
+
+      const newProduct = await createProduct.mutateAsync(productData);
+      
+      // Upload images after product creation
+      await uploadProductImages(data.imageFiles, newProduct.id);
       
       toast({
         title: "Success",

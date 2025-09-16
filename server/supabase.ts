@@ -44,19 +44,28 @@ export async function initializeStorageBucket() {
   }
 }
 
-// Helper function to upload file
-export async function uploadProductImage(file: File, productId: string, imageIndex: number): Promise<string> {
-  const fileExt = file.name.split('.').pop();
-  const fileName = `${productId}/image-${imageIndex}.${fileExt}`;
-  
+// Helper function to upload file (using Buffer for Node.js compatibility)
+export async function uploadProductImage(
+  fileBuffer: Buffer,
+  contentType: string,
+  originalName: string,
+  productId: string,
+  imageIndex: number,
+  batchId?: number
+): Promise<string> {
+  const fileExt = originalName.split('.').pop() || 'jpg';
+  const fileName = `${productId}/image-${imageIndex}-${batchId || Date.now()}.${fileExt}`;
+
   const { data, error } = await supabase.storage
     .from(STORAGE_BUCKET)
-    .upload(fileName, file, {
+    .upload(fileName, fileBuffer, {
+      contentType,
       cacheControl: '3600',
       upsert: true
     });
 
   if (error) {
+    console.error('Supabase storage error:', error);
     throw new Error(`Upload failed: ${error.message}`);
   }
 

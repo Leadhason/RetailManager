@@ -12,20 +12,19 @@ interface ImageFile {
   id: string;
 }
 
-export async function uploadProductImages(images: ImageFile[], productId?: string): Promise<ImageUploadResponse> {
+export async function uploadProductImages(images: ImageFile[], productId: string): Promise<ImageUploadResponse> {
+  if (!productId) {
+    throw new Error('Product ID is required for image upload');
+  }
+
   const formData = new FormData();
   
   // Add images to form data
   images.forEach((image, index) => {
     formData.append('images', image.file);
   });
-  
-  // Add product ID if provided
-  if (productId) {
-    formData.append('productId', productId);
-  }
 
-  const response = await fetch('/api/products/upload-images', {
+  const response = await fetch(`/api/products/${productId}/upload-images`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${localStorage.getItem('token')}`,

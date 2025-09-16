@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { AuthService } from "./services/auth";
 import { EmailService } from "./services/email";
-import { uploadProductImage, deleteProductImages } from "./supabase";
+import { uploadProductImage, deleteProductImages, supabase, STORAGE_BUCKET } from "./supabase";
 import { 
   insertUserSchema, insertProductSchema, insertCategorySchema,
   insertCustomerSchema, insertOrderSchema, insertSupplierSchema,
@@ -278,7 +278,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Product image upload endpoint
-  app.post("/api/products/upload-images", authenticate, authorize("staff"), upload.array('images', 4), async (req: any, res) => {
+  app.post("/api/products/:productId/upload-images", authenticate, authorize("staff"), upload.array('images', 4), async (req: any, res) => {
     try {
       if (!req.files || req.files.length === 0) {
         return res.status(400).json({ message: "No images uploaded" });
@@ -292,32 +292,113 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Maximum 4 images allowed" });
       }
 
-      const productId = req.body.productId || `temp-${Date.now()}`;
-      const imageUrls: string[] = [];
+      const productId = req.params.productId;
+      
+      // Verify product exists and get current image count
+      const existingProduct = await storage.getProduct(productId);
+      if (!existingProduct) {
+        return res.status(404).json({ message: "Product not found" });
+      }
+
+      const existingImageCount = existingProduct.images?.length || 0;
+      const intendedUploadCount = req.files.length;
+      const finalImageCount = existingImageCount + intendedUploadCount;
+
+      // Check product-level constraints
+      if (finalImageCount > 4) {
+        return res.status(400).json({ 
+          message: `Product would have ${finalImageCount} images (maximum 4 allowed). Currently has ${existingImageCount}, tried to upload ${intendedUploadCount}.` 
+        });
+      }
+
+      if (finalImageCount < 2) {
+        return res.status(400).json({ 
+          message: `Product must have at least 2 images. Currently has ${existingImageCount}, uploading ${intendedUploadCount} would result in ${finalImageCount}.` 
+        });
+      }
 
       // Upload each image to Supabase
+      const uploadedImages: string[] = [];
+      const uploadedPaths: string[] = []; // Track paths for targeted cleanup
+      let failedUploads = 0;
+      const batchId = Date.now(); // Unique batch identifier
+
       for (let i = 0; i < req.files.length; i++) {
         const file = req.files[i];
         
-        // Convert buffer to File-like object for Supabase
-        const blob = new Blob([file.buffer], { type: file.mimetype });
-        const uploadFile = new File([blob], file.originalname, { type: file.mimetype });
-        
         try {
-          const imageUrl = await uploadProductImage(uploadFile, productId, i);
-          imageUrls.push(imageUrl);
+          const imageUrl = await uploadProductImage(
+            file.buffer,
+            file.mimetype,
+            file.originalname,
+            productId,
+            i,
+            batchId
+          );
+          uploadedImages.push(imageUrl);
+          
+          // Store path for potential cleanup
+          const fileExt = file.originalname.split('.').pop() || 'jpg';
+          const fileName = `${productId}/image-${i}-${batchId}.${fileExt}`;
+          uploadedPaths.push(fileName);
         } catch (uploadError) {
           console.error(`Error uploading image ${i}:`, uploadError);
-          return res.status(500).json({ 
-            message: `Failed to upload image ${i + 1}: ${uploadError instanceof Error ? uploadError.message : 'Unknown error'}` 
-          });
+          failedUploads++;
         }
+      }
+
+      // Verify final image count meets minimum requirement
+      const finalSuccessfulCount = existingImageCount + uploadedImages.length;
+      if (finalSuccessfulCount < 2) {
+        // Clean up only the newly uploaded images (not all product images)
+        if (uploadedPaths.length > 0) {
+          try {
+            await supabase.storage
+              .from(STORAGE_BUCKET)
+              .remove(uploadedPaths);
+            console.log(`Cleaned up ${uploadedPaths.length} uploaded images due to insufficient final count`);
+          } catch (cleanupError) {
+            console.error('Error cleaning up uploaded images:', cleanupError);
+          }
+        }
+        
+        return res.status(400).json({ 
+          message: `Product must have at least 2 images total. Currently has ${existingImageCount}, successfully uploaded ${uploadedImages.length}, failed ${failedUploads}.` 
+        });
+      }
+
+      // Merge with existing images and update product
+      const existingImages = existingProduct.images || [];
+      const allImages = [...existingImages, ...uploadedImages];
+      
+      try {
+        await storage.updateProduct(productId, { images: allImages });
+      } catch (updateError) {
+        // Rollback uploaded images if product update fails
+        if (uploadedPaths.length > 0) {
+          try {
+            await supabase.storage
+              .from(STORAGE_BUCKET)
+              .remove(uploadedPaths);
+            console.log(`Rolled back ${uploadedPaths.length} uploaded images due to product update failure`);
+          } catch (cleanupError) {
+            console.error('Error rolling back uploaded images:', cleanupError);
+          }
+        }
+        
+        console.error('Product update error:', updateError);
+        return res.status(500).json({ 
+          message: 'Failed to update product with image URLs. Uploaded images have been cleaned up.' 
+        });
       }
 
       res.json({ 
         message: "Images uploaded successfully", 
         productId,
-        imageUrls 
+        imageUrls: allImages, // Return all images (existing + new)
+        uploadedCount: uploadedImages.length,
+        failedCount: failedUploads,
+        totalImages: allImages.length
       });
     } catch (error) {
       console.error("Image upload error:", error);
