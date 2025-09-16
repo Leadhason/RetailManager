@@ -40,7 +40,7 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background" data-testid="login-page">
+    <div className="min-h-screen flex items-center justify-center" data-testid="login-page">
       <Card className="w-full max-w-md mx-4">
         <CardHeader className="text-center space-y-6">
           <div className="flex justify-center">
@@ -67,6 +67,7 @@ export default function Login() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 data-testid="email-input"
+                className="bg-white text-black outline-none focus:outline-none focus:ring-0"
               />
             </div>
             <div className="space-y-2">
@@ -80,6 +81,7 @@ export default function Login() {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   data-testid="password-input"
+                  className="bg-white text-black outline-none focus:ring-0 focus:outline-none"
                 />
                 <Button
                   type="button"
