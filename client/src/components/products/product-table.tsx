@@ -103,8 +103,8 @@ export default function ProductTable({
   return (
     <div className="space-y-4" data-testid="product-table">
       {/* Search */}
-      <div className="flex justify-between items-center">
-        <div className="relative w-64">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+        <div className="relative w-full sm:w-64">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
           <Input
             placeholder="Search products..."
@@ -119,21 +119,22 @@ export default function ProductTable({
         </div>
       </div>
 
-      {/* Table */}
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>SKU</TableHead>
-              <TableHead>Brand</TableHead>
-              <TableHead>Price (GHS)</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Created</TableHead>
-              <TableHead className="w-12">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
+      {/* Desktop Table */}
+      <div className="hidden md:block rounded-md border">
+        <div className="overflow-x-auto">
+          <Table className="min-w-[800px]">
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead className="hidden lg:table-cell">SKU</TableHead>
+                <TableHead className="hidden xl:table-cell">Brand</TableHead>
+                <TableHead>Price (GHS)</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="hidden lg:table-cell">Created</TableHead>
+                <TableHead className="w-12">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
             {filteredProducts.length > 0 ? (
               filteredProducts.map((product) => (
                 <TableRow key={product.id} data-testid={`product-row-${product.id}`}>
@@ -147,20 +148,20 @@ export default function ProductTable({
                       )}
                     </div>
                   </TableCell>
-                  <TableCell className="font-mono text-sm">
+                  <TableCell className="hidden lg:table-cell font-mono text-sm">
                     {product.sku || "—"}
                   </TableCell>
-                  <TableCell>{product.brand || "—"}</TableCell>
+                  <TableCell className="hidden xl:table-cell">{product.brand || "—"}</TableCell>
                   <TableCell className="font-medium">
                     {product.sellingPrice ? `${Number(product.sellingPrice).toFixed(2)}` : "—"}
                   </TableCell>
                   <TableCell>
-                    <Badge className={getStatusColor(product.status)}>
-                      {product.status}
+                    <Badge className={getStatusColor(product.status || 'inactive')}>
+                      {product.status || 'inactive'}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {new Date(product.createdAt).toLocaleDateString()}
+                  <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
+                    {product.createdAt ? new Date(product.createdAt).toLocaleDateString() : '—'}
                   </TableCell>
                   <TableCell>
                     <DropdownMenu>
@@ -168,7 +169,7 @@ export default function ProductTable({
                         <Button 
                           variant="ghost" 
                           size="sm" 
-                          className="h-8 w-8 p-0"
+                          className="h-10 w-10 p-0"
                           data-testid={`product-actions-${product.id}`}
                         >
                           <MoreHorizontal className="h-4 w-4" />
@@ -210,8 +211,109 @@ export default function ProductTable({
                 </TableCell>
               </TableRow>
             )}
-          </TableBody>
-        </Table>
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+
+      {/* Mobile Cards */}
+      <div className="md:hidden space-y-4">
+        {filteredProducts.length > 0 ? (
+          filteredProducts.map((product) => (
+            <div 
+              key={product.id} 
+              className="bg-card border rounded-lg p-4 space-y-3"
+              data-testid={`product-card-${product.id}`}
+            >
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <h3 className="font-medium text-base">{product.name}</h3>
+                  {product.shortDescription && (
+                    <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                      {product.shortDescription}
+                    </p>
+                  )}
+                </div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="h-10 w-10 p-0 -mr-2"
+                      data-testid={`product-mobile-actions-${product.id}`}
+                    >
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    {onView && (
+                      <DropdownMenuItem onClick={() => onView(product)}>
+                        <Eye className="mr-2 h-4 w-4" />
+                        View
+                      </DropdownMenuItem>
+                    )}
+                    {onEdit && (
+                      <DropdownMenuItem onClick={() => onEdit(product)}>
+                        <Edit className="mr-2 h-4 w-4" />
+                        Edit
+                      </DropdownMenuItem>
+                    )}
+                    {onDelete && (
+                      <DropdownMenuItem 
+                        onClick={() => onDelete(product)}
+                        className="text-destructive"
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Delete
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <span className="text-muted-foreground">Price:</span>
+                  <div className="font-medium">
+                    {product.sellingPrice ? `GHS ${Number(product.sellingPrice).toFixed(2)}` : "—"}
+                  </div>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Status:</span>
+                  <div className="mt-1">
+                    <Badge className={getStatusColor(product.status || 'inactive')}>
+                      {product.status || 'inactive'}
+                    </Badge>
+                  </div>
+                </div>
+                {product.sku && (
+                  <div>
+                    <span className="text-muted-foreground">SKU:</span>
+                    <div className="font-mono">{product.sku}</div>
+                  </div>
+                )}
+                {product.brand && (
+                  <div>
+                    <span className="text-muted-foreground">Brand:</span>
+                    <div>{product.brand}</div>
+                  </div>
+                )}
+              </div>
+              
+              {product.createdAt && (
+                <div className="pt-2 text-xs text-muted-foreground border-t">
+                  Created: {new Date(product.createdAt).toLocaleDateString()}
+                </div>
+              )}
+            </div>
+          ))
+        ) : (
+          <div className="text-center py-12">
+            <div className="text-muted-foreground">
+              {searchTerm ? "No products found matching your search" : "No products available"}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
