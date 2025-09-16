@@ -2,6 +2,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { storage } from "./storage";
+import { initializeStorageBucket } from "./supabase";
 
 // Handle TLS certificate issues in development
 if (process.env.NODE_ENV === 'development') {
@@ -65,6 +66,7 @@ async function seedDefaultAdmin() {
 
 (async () => {
   await seedDefaultAdmin();
+  await initializeStorageBucket();
   const server = await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {

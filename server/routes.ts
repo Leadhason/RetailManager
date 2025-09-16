@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { AuthService } from "./services/auth";
 import { EmailService } from "./services/email";
+import { uploadProductImage, deleteProductImages } from "./supabase";
 import { 
   insertUserSchema, insertProductSchema, insertCategorySchema,
   insertCustomerSchema, insertOrderSchema, insertSupplierSchema,
@@ -15,6 +16,7 @@ import { z } from "zod";
 import { drizzle } from "drizzle-orm/neon-http";
 import { neon } from "@neondatabase/serverless";
 import { eq, sql } from "drizzle-orm";
+import multer from "multer";
 
 // Middleware for authentication
 const authenticate = async (req: any, res: any, next: any) => {
@@ -42,6 +44,22 @@ const authorize = (requiredRole: string) => {
     next();
   };
 };
+
+// Configure multer for file upload
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB limit
+    files: 4 // Max 4 files
+  },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed'));
+    }
+  }
+});
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Authentication routes
@@ -256,6 +274,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Get products by category error:", error);
       res.status(500).json({ message: "Failed to fetch products by category" });
+    }
+  });
+
+  // Product image upload endpoint
+  app.post("/api/products/upload-images", authenticate, authorize("staff"), upload.array('images', 4), async (req: any, res) => {
+    try {
+      if (!req.files || req.files.length === 0) {
+        return res.status(400).json({ message: "No images uploaded" });
+      }
+
+      if (req.files.length < 2) {
+        return res.status(400).json({ message: "At least 2 images are required" });
+      }
+
+      if (req.files.length > 4) {
+        return res.status(400).json({ message: "Maximum 4 images allowed" });
+      }
+
+      const productId = req.body.productId || `temp-${Date.now()}`;
+      const imageUrls: string[] = [];
+
+      // Upload each image to Supabase
+      for (let i = 0; i < req.files.length; i++) {
+        const file = req.files[i];
+        
+        // Convert buffer to File-like object for Supabase
+        const blob = new Blob([file.buffer], { type: file.mimetype });
+        const uploadFile = new File([blob], file.originalname, { type: file.mimetype });
+        
+        try {
+          const imageUrl = await uploadProductImage(uploadFile, productId, i);
+          imageUrls.push(imageUrl);
+        } catch (uploadError) {
+          console.error(`Error uploading image ${i}:`, uploadError);
+          return res.status(500).json({ 
+            message: `Failed to upload image ${i + 1}: ${uploadError instanceof Error ? uploadError.message : 'Unknown error'}` 
+          });
+        }
+      }
+
+      res.json({ 
+        message: "Images uploaded successfully", 
+        productId,
+        imageUrls 
+      });
+    } catch (error) {
+      console.error("Image upload error:", error);
+      res.status(500).json({ message: "Failed to upload images" });
     }
   });
 

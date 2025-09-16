@@ -25,13 +25,22 @@ export async function initializeStorageBucket() {
         fileSizeLimit: 5242880, // 5MB
       });
       
-      if (error && error.message !== 'Bucket already exists') {
-        console.error('Error creating storage bucket:', error);
-        throw error;
+      if (error) {
+        if (error.message.includes('already exists')) {
+          console.log(`Storage bucket '${STORAGE_BUCKET}' already exists`);
+        } else if (error.message.includes('policy')) {
+          console.warn(`Bucket '${STORAGE_BUCKET}' may need to be created manually in Supabase dashboard due to RLS policy`);
+        } else {
+          console.error('Error creating storage bucket:', error);
+        }
+      } else {
+        console.log(`Storage bucket '${STORAGE_BUCKET}' created successfully`);
       }
+    } else {
+      console.log(`Storage bucket '${STORAGE_BUCKET}' already exists`);
     }
   } catch (error) {
-    console.error('Error initializing storage bucket:', error);
+    console.warn('Error initializing storage bucket (this is normal if bucket exists):', error instanceof Error ? error.message : error);
   }
 }
 
