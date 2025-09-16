@@ -7,3 +7,4 @@ vite.config.ts.*
 attached_assets/
 *.txt
 *.env
+.env
