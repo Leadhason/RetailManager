@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,19 +6,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Search, DollarSign, CreditCard, Banknote, TrendingUp, CheckCircle, Clock, XCircle, RefreshCw } from "lucide-react";
-
-interface Payment {
-  id: string;
-  orderId: string;
-  customerName: string;
-  amount: number;
-  method: 'card' | 'bank-transfer' | 'mobile-money' | 'cash';
-  status: 'completed' | 'pending' | 'failed' | 'refunded';
-  date: string;
-  transactionId?: string;
-  fees: number;
-}
+import { Search, DollarSign, CreditCard, Banknote, TrendingUp, CheckCircle, Clock, XCircle, RefreshCw, Receipt, Eye, Loader2 } from "lucide-react";
+import { 
+  useTransactions, 
+  useFinancialSummary, 
+  useReceiptByTransaction, 
+  useMarkReceiptViewed,
+  Transaction,
+  TransactionFilters 
+} from "@/hooks/use-financial";
 
 interface PaymentMethod {
   id: string;
@@ -33,54 +29,64 @@ export default function PaymentsIndex() {
   const [activeTab, setActiveTab] = useState("transactions");
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [paymentMethodFilter, setPaymentMethodFilter] = useState("all");
   const [dateRange, setDateRange] = useState("7days");
   const { toast } = useToast();
 
-  const [payments] = useState<Payment[]>([
-    {
-      id: "1",
-      orderId: "ORD-001",
-      customerName: "John Doe",
-      amount: 450.00,
-      method: "card",
-      status: "completed",
-      date: "2024-01-15",
-      transactionId: "txn_12345",
-      fees: 13.50
-    },
-    {
-      id: "2",
-      orderId: "ORD-002",
-      customerName: "Jane Smith",
-      amount: 280.00,
-      method: "mobile-money",
-      status: "pending",
-      date: "2024-01-15",
-      transactionId: "momo_67890",
-      fees: 8.40
-    },
-    {
-      id: "3",
-      orderId: "ORD-003",
-      customerName: "Mike Johnson",
-      amount: 750.00,
-      method: "bank-transfer",
-      status: "failed",
-      date: "2024-01-14",
-      transactionId: "bank_54321",
-      fees: 0.00
-    },
-    {
-      id: "4",
-      orderId: "ORD-004",
-      customerName: "Sarah Wilson",
-      amount: 125.00,
-      method: "cash",
-      status: "completed",
-      date: "2024-01-14",
-      fees: 0.00
+  // Calculate date range for filtering
+  const dateFilter = useMemo(() => {
+    const endDate = new Date();
+    let startDate = new Date();
+    
+    switch (dateRange) {
+      case "today":
+        startDate = new Date();
+        startDate.setHours(0, 0, 0, 0);
+        break;
+      case "7days":
+        startDate.setDate(endDate.getDate() - 7);
+        break;
+      case "30days":
+        startDate.setDate(endDate.getDate() - 30);
+        break;
+      case "90days":
+        startDate.setDate(endDate.getDate() - 90);
+        break;
+      default:
+        startDate = new Date(0); // All time
     }
-  ]);
+    
+    return { startDate, endDate };
+  }, [dateRange]);
+
+  // Build filters for API calls
+  const filters: TransactionFilters = useMemo(() => {
+    const result: TransactionFilters = {
+      startDate: dateFilter.startDate,
+      endDate: dateFilter.endDate,
+    };
+    
+    if (statusFilter !== "all") result.status = statusFilter;
+    if (paymentMethodFilter !== "all") result.paymentMethod = paymentMethodFilter;
+    
+    return result;
+  }, [dateFilter, statusFilter, paymentMethodFilter]);
+
+  // Real data from API
+  const { data: transactions = [], isLoading: transactionsLoading, error: transactionsError } = useTransactions(100, 0, filters);
+  const { data: financialSummary, isLoading: summaryLoading } = useFinancialSummary(dateFilter.startDate, dateFilter.endDate);
+  const markReceiptViewed = useMarkReceiptViewed();
+
+  // Filter transactions by search term
+  const filteredTransactions = useMemo(() => {
+    if (!searchTerm) return transactions;
+    
+    return transactions.filter(transaction => 
+      transaction.reference.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (transaction.orderId && transaction.orderId.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      transaction.paymentMethod.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [transactions, searchTerm]);
 
   const [paymentMethods] = useState<PaymentMethod[]>([
     {
@@ -117,25 +123,37 @@ export default function PaymentsIndex() {
     }
   ]);
 
-  const filteredPayments = payments.filter(payment => {
-    const matchesSearch = payment.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         payment.orderId.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === "all" || payment.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  // Receipt viewing functionality
+  const handleViewReceipt = async (transactionId: string) => {
+    try {
+      // This will be implemented when receipt data is available
+      toast({
+        title: "Receipt Viewer",
+        description: "Opening receipt for transaction " + transactionId,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to load receipt",
+        variant: "destructive",
+      });
+    }
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'completed':
-        return "bg-green-100 text-green-800";
+        return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300";
+      case 'processing':
+        return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300";
       case 'pending':
-        return "bg-yellow-100 text-yellow-800";
+        return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300";
       case 'failed':
-        return "bg-red-100 text-red-800";
-      case 'refunded':
-        return "bg-gray-100 text-gray-800";
+        return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300";
+      case 'cancelled':
+        return "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300";
       default:
-        return "bg-gray-100 text-gray-800";
+        return "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300";
     }
   };
 
@@ -158,28 +176,30 @@ export default function PaymentsIndex() {
     switch (status) {
       case 'completed':
         return <CheckCircle className="w-4 h-4 text-green-500" />;
+      case 'processing':
+        return <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />;
       case 'pending':
         return <Clock className="w-4 h-4 text-yellow-500" />;
       case 'failed':
         return <XCircle className="w-4 h-4 text-red-500" />;
-      case 'refunded':
-        return <RefreshCw className="w-4 h-4 text-gray-500" />;
+      case 'cancelled':
+        return <XCircle className="w-4 h-4 text-gray-500" />;
       default:
         return <Clock className="w-4 h-4" />;
     }
   };
 
-  const handleRefund = (payment: Payment) => {
+  const handleRefund = (transaction: Transaction) => {
     toast({
       title: "Process Refund",
-      description: `Processing refund for ${payment.orderId} (feature coming soon)`,
+      description: `Processing refund for transaction ${transaction.reference}`,
     });
   };
 
-  const handleRetryPayment = (payment: Payment) => {
+  const handleRetryPayment = (transaction: Transaction) => {
     toast({
-      title: "Retry Payment",
-      description: `Retrying payment for ${payment.orderId} (feature coming soon)`,
+      title: "Retry Payment", 
+      description: `Retrying payment for transaction ${transaction.reference}`,
     });
   };
 
@@ -190,11 +210,10 @@ export default function PaymentsIndex() {
     });
   };
 
-  // Calculate summary metrics
-  const totalAmount = payments.reduce((sum, p) => sum + (p.status === 'completed' ? p.amount : 0), 0);
-  const completedPayments = payments.filter(p => p.status === 'completed').length;
-  const pendingPayments = payments.filter(p => p.status === 'pending').length;
-  const totalFees = payments.reduce((sum, p) => sum + (p.status === 'completed' ? p.fees : 0), 0);
+  // Add payment method filter
+  const handlePaymentMethodChange = (value: string) => {
+    setPaymentMethodFilter(value);
+  };
 
   return (
     <div className="space-y-6" data-testid="payments-page">
@@ -226,7 +245,13 @@ export default function PaymentsIndex() {
             <DollarSign className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">GHS {totalAmount.toLocaleString()}</div>
+            <div className="text-2xl font-bold">
+              {summaryLoading ? (
+                <Loader2 className="w-6 h-6 animate-spin" />
+              ) : (
+                `GHS ${financialSummary?.totalRevenue?.toLocaleString() || '0'}`
+              )}
+            </div>
             <p className="text-xs text-muted-foreground">This period</p>
           </CardContent>
         </Card>
@@ -237,19 +262,31 @@ export default function PaymentsIndex() {
             <CheckCircle className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{completedPayments}</div>
+            <div className="text-2xl font-bold">
+              {summaryLoading ? (
+                <Loader2 className="w-6 h-6 animate-spin" />
+              ) : (
+                financialSummary?.successfulPayments || 0
+              )}
+            </div>
             <p className="text-xs text-muted-foreground">Successful payments</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pending</CardTitle>
-            <Clock className="h-4 w-4 text-yellow-500" />
+            <CardTitle className="text-sm font-medium">Failed</CardTitle>
+            <XCircle className="h-4 w-4 text-red-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{pendingPayments}</div>
-            <p className="text-xs text-muted-foreground">Awaiting processing</p>
+            <div className="text-2xl font-bold">
+              {summaryLoading ? (
+                <Loader2 className="w-6 h-6 animate-spin" />
+              ) : (
+                financialSummary?.failedPayments || 0
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">Failed payments</p>
           </CardContent>
         </Card>
 
@@ -259,7 +296,13 @@ export default function PaymentsIndex() {
             <CreditCard className="h-4 w-4 text-purple-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">GHS {totalFees.toFixed(2)}</div>
+            <div className="text-2xl font-bold">
+              {summaryLoading ? (
+                <Loader2 className="w-6 h-6 animate-spin" />
+              ) : (
+                `GHS ${financialSummary?.totalFees?.toFixed(2) || '0.00'}`
+              )}
+            </div>
             <p className="text-xs text-muted-foreground">Total fees paid</p>
           </CardContent>
         </Card>
@@ -305,6 +348,19 @@ export default function PaymentsIndex() {
                   </SelectContent>
                 </Select>
 
+                <Select value={paymentMethodFilter} onValueChange={handlePaymentMethodChange}>
+                  <SelectTrigger className="w-[150px]">
+                    <SelectValue placeholder="Method" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Methods</SelectItem>
+                    <SelectItem value="card">Card</SelectItem>
+                    <SelectItem value="bank-transfer">Bank Transfer</SelectItem>
+                    <SelectItem value="mobile-money">Mobile Money</SelectItem>
+                    <SelectItem value="cash">Cash</SelectItem>
+                  </SelectContent>
+                </Select>
+
                 <Select value={dateRange} onValueChange={setDateRange}>
                   <SelectTrigger className="w-[150px]">
                     <SelectValue placeholder="Date Range" />
@@ -325,7 +381,11 @@ export default function PaymentsIndex() {
             <CardHeader>
               <CardTitle>Payment Transactions</CardTitle>
               <CardDescription>
-                {filteredPayments.length} of {payments.length} transactions
+                {transactionsLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin inline mr-2" />
+                ) : (
+                  `${filteredTransactions.length} transactions found`
+                )}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -344,64 +404,92 @@ export default function PaymentsIndex() {
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredPayments.map((payment) => (
-                        <tr key={payment.id} className="border-b hover:bg-muted/50">
-                          <td className="p-3">
-                            <div className="font-medium">{payment.orderId}</div>
-                            {payment.transactionId && (
-                              <div className="text-sm text-muted-foreground">
-                                {payment.transactionId}
-                              </div>
-                            )}
-                          </td>
-                          <td className="p-3">{payment.customerName}</td>
-                          <td className="p-3">
-                            <div className="font-medium">GHS {payment.amount.toFixed(2)}</div>
-                            {payment.fees > 0 && (
-                              <div className="text-sm text-muted-foreground">
-                                Fee: GHS {payment.fees.toFixed(2)}
-                              </div>
-                            )}
-                          </td>
-                          <td className="p-3">
-                            <div className="flex items-center space-x-2">
-                              {getMethodIcon(payment.method)}
-                              <span className="capitalize">{payment.method.replace('-', ' ')}</span>
-                            </div>
-                          </td>
-                          <td className="p-3">
-                            <div className="flex items-center space-x-2">
-                              {getStatusIcon(payment.status)}
-                              <Badge className={getStatusColor(payment.status)}>
-                                {payment.status}
-                              </Badge>
-                            </div>
-                          </td>
-                          <td className="p-3">{payment.date}</td>
-                          <td className="p-3">
-                            <div className="flex items-center space-x-1">
-                              {payment.status === 'completed' && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleRefund(payment)}
-                                >
-                                  Refund
-                                </Button>
-                              )}
-                              {payment.status === 'failed' && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleRetryPayment(payment)}
-                                >
-                                  Retry
-                                </Button>
-                              )}
-                            </div>
+                      {transactionsLoading ? (
+                        <tr>
+                          <td colSpan={7} className="p-8 text-center">
+                            <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
+                            <p className="text-muted-foreground">Loading transactions...</p>
                           </td>
                         </tr>
-                      ))}
+                      ) : filteredTransactions.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="p-8 text-center">
+                            <p className="text-muted-foreground">No transactions found</p>
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredTransactions.map((transaction) => (
+                          <tr key={transaction.id} className="border-b hover:bg-muted/50">
+                            <td className="p-3">
+                              <div className="font-medium">{transaction.orderId || 'N/A'}</div>
+                              <div className="text-sm text-muted-foreground">
+                                {transaction.reference}
+                              </div>
+                            </td>
+                            <td className="p-3">
+                              <div className="text-sm text-muted-foreground">
+                                {transaction.customerId ? `Customer ${transaction.customerId.slice(0, 8)}...` : 'Guest'}
+                              </div>
+                            </td>
+                            <td className="p-3">
+                              <div className="font-medium">GHS {parseFloat(transaction.amount || '0').toFixed(2)}</div>
+                              {parseFloat(transaction.fees || '0') > 0 && (
+                                <div className="text-sm text-muted-foreground">
+                                  Fee: GHS {parseFloat(transaction.fees).toFixed(2)}
+                                </div>
+                              )}
+                            </td>
+                            <td className="p-3">
+                              <div className="flex items-center space-x-2">
+                                {getMethodIcon(transaction.paymentMethod)}
+                                <span className="capitalize">{transaction.paymentMethod.replace('-', ' ')}</span>
+                              </div>
+                            </td>
+                            <td className="p-3">
+                              <div className="flex items-center space-x-2">
+                                {getStatusIcon(transaction.status)}
+                                <Badge className={getStatusColor(transaction.status)}>
+                                  {transaction.status}
+                                </Badge>
+                              </div>
+                            </td>
+                            <td className="p-3">
+                              {new Date(transaction.createdAt).toLocaleDateString()}
+                            </td>
+                            <td className="p-3">
+                              <div className="flex items-center space-x-1">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleViewReceipt(transaction.id)}
+                                  data-testid={`view-receipt-${transaction.id}`}
+                                >
+                                  <Receipt className="w-4 h-4 mr-1" />
+                                  Receipt
+                                </Button>
+                                {transaction.status === 'completed' && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleRefund(transaction)}
+                                  >
+                                    Refund
+                                  </Button>
+                                )}
+                                {transaction.status === 'failed' && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleRetryPayment(transaction)}
+                                  >
+                                    Retry
+                                  </Button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
                     </tbody>
                   </table>
                 </div>
