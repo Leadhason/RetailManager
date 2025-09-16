@@ -27,7 +27,6 @@ interface InventoryItem {
 export default function InventoryIndex() {
   const [activeTab, setActiveTab] = useState("overview");
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedLocation, setSelectedLocation] = useState("all");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const { toast } = useToast();
 
@@ -83,10 +82,9 @@ export default function InventoryIndex() {
   const filteredInventory = inventory.filter(item => {
     const matchesSearch = item.productName.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          item.sku.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesLocation = selectedLocation === "all" || item.location === selectedLocation;
     const matchesCategory = selectedCategory === "all" || item.category === selectedCategory;
     
-    return matchesSearch && matchesLocation && matchesCategory;
+    return matchesSearch && matchesCategory;
   });
 
   const getStatusColor = (status: string) => {
@@ -222,16 +220,6 @@ export default function InventoryIndex() {
               />
             </div>
 
-            <Select value={selectedLocation} onValueChange={setSelectedLocation}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Location" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Locations</SelectItem>
-                <SelectItem value="Warehouse A">Warehouse A</SelectItem>
-                <SelectItem value="Warehouse B">Warehouse B</SelectItem>
-              </SelectContent>
-            </Select>
 
             <Select value={selectedCategory} onValueChange={setSelectedCategory}>
               <SelectTrigger className="w-[180px]">
@@ -268,8 +256,6 @@ export default function InventoryIndex() {
                     <th className="p-3 font-medium">Stock</th>
                     <th className="p-3 font-medium">Status</th>
                     <th className="p-3 font-medium">Value</th>
-                    <th className="p-3 font-medium">Location</th>
-                    <th className="p-3 font-medium">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -309,16 +295,6 @@ export default function InventoryIndex() {
                           Unit: GHS {item.unitCost.toFixed(2)}
                         </div>
                       </td>
-                      <td className="p-3">{item.location}</td>
-                      <td className="p-3">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleStockAdjustment(item)}
-                        >
-                          Adjust
-                        </Button>
-                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -330,7 +306,7 @@ export default function InventoryIndex() {
                 <Package className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
                 <h3 className="text-lg font-semibold mb-2">No Inventory Items</h3>
                 <p className="text-muted-foreground">
-                  {searchTerm || selectedLocation !== "all" || selectedCategory !== "all" 
+                  {searchTerm || selectedCategory !== "all" 
                     ? "No items match your current filters"
                     : "Start by adding your first inventory item"
                   }
