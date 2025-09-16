@@ -322,31 +322,17 @@ export class DatabaseStorage implements IStorage {
   }
 
   async verifyPassword(email: string, password: string): Promise<User | null> {
-    console.log(`[Auth] Verifying password for email: ${email}`);
-    console.log(`[Auth] Received password: "${password}" (length: ${password.length})`);
     const user = await this.getUserByEmail(email);
     if (!user) {
-      console.log(`[Auth] User not found for email: ${email}`);
       return null;
     }
-    
-    console.log(`[Auth] User found: id=${user.id}, isActive=${user.isActive}`);
-    console.log(`[Auth] Stored password hash: ${user.password}`);
     
     // Check if user is active
     if (!user.isActive) {
-      console.log(`[Auth] User account is inactive for email: ${email}`);
       return null;
     }
     
-    // Test with a known password hash to verify bcrypt is working
-    console.log(`[Auth] Testing bcrypt with "admin123"...`);
-    const testHash = await bcrypt.hash("admin123", 10);
-    const testResult = await bcrypt.compare("admin123", testHash);
-    console.log(`[Auth] Test bcrypt result: ${testResult}`);
-    
     const isValid = await bcrypt.compare(password, user.password);
-    console.log(`[Auth] Password verification result: ${isValid}`);
     if (!isValid) return null;
     
     // Update last login

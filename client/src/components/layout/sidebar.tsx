@@ -21,6 +21,7 @@ import {
 interface SidebarProps {
   collapsed: boolean;
   onToggle: () => void;
+  onLinkClick?: () => void;
 }
 
 interface NavItem {
@@ -102,12 +103,14 @@ function NavItemComponent({
   item, 
   collapsed, 
   isActive, 
-  onItemClick 
+  onItemClick,
+  onLinkClick
 }: { 
   item: NavItem; 
   collapsed: boolean; 
   isActive: boolean;
   onItemClick: () => void;
+  onLinkClick?: () => void;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const hasChildren = item.children && item.children.length > 0;
@@ -169,7 +172,10 @@ function NavItemComponent({
         <div className="ml-8 mt-1 space-y-1">
           {item.children!.map((child) => (
             <Link key={child.href} href={child.href!}>
-              <div className="flex items-center space-x-3 p-2 rounded hover:bg-accent cursor-pointer text-sm text-muted-foreground hover:text-foreground">
+              <div 
+                className="flex items-center space-x-3 p-3 rounded hover:bg-accent cursor-pointer text-sm text-muted-foreground hover:text-foreground"
+                onClick={onLinkClick}
+              >
                 <span>{child.title}</span>
               </div>
             </Link>
@@ -180,13 +186,13 @@ function NavItemComponent({
   );
 }
 
-export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
+export default function Sidebar({ collapsed, onToggle, onLinkClick }: SidebarProps) {
   const [location] = useLocation();
 
   return (
     <aside 
       className={cn(
-        "bg-card border-r border-border flex-shrink-0 transition-all duration-300 ease-in-out",
+        "bg-card border-r border-border flex-shrink-0 transition-all duration-300 ease-in-out h-full",
         collapsed ? "w-16" : "w-64"
       )}
       data-testid="sidebar"
@@ -220,7 +226,8 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
               item={item}
               collapsed={collapsed}
               isActive={location === item.href}
-              onItemClick={() => {}}
+              onItemClick={onLinkClick || (() => {})}
+              onLinkClick={onLinkClick}
             />
           ))}
         </nav>
