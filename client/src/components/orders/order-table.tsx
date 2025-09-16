@@ -25,6 +25,7 @@ interface OrderTableProps {
   onEdit?: (order: Order) => void;
   onUpdateStatus?: (order: Order) => void;
   isLoading?: boolean;
+  onRowClick?: (order: Order) => void;
 }
 
 const getStatusColor = (status: string) => {
@@ -66,7 +67,8 @@ export default function OrderTable({
   onView, 
   onEdit, 
   onUpdateStatus,
-  isLoading 
+  isLoading,
+  onRowClick 
 }: OrderTableProps) {
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -149,13 +151,18 @@ export default function OrderTable({
               <TableHead>Status</TableHead>
               <TableHead>Payment</TableHead>
               <TableHead>Date</TableHead>
-              <TableHead className="w-12">Actions</TableHead>
+              <TableHead className="w-12"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filteredOrders.length > 0 ? (
               filteredOrders.map((order) => (
-                <TableRow key={order.id} data-testid={`order-row-${order.id}`}>
+                <TableRow 
+                  key={order.id} 
+                  data-testid={`order-row-${order.id}`}
+                  className="cursor-pointer hover:bg-muted/50 transition-colors"
+                  onClick={() => onRowClick?.(order)}
+                >
                   <TableCell className="font-mono font-medium">
                     {order.orderNumber}
                   </TableCell>

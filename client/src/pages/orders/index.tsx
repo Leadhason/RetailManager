@@ -1,22 +1,27 @@
-import React from "react";
+import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useOrders, useUpdateOrderStatus } from "@/hooks/use-orders";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, ShoppingCart, Clock, Truck, CheckCircle } from "lucide-react";
+import { ShoppingCart, Clock, Truck, CheckCircle } from "lucide-react";
 import OrderTable from "@/components/orders/order-table";
+import OrderDetailsPopover from "@/components/orders/order-details-popover";
 import type { Order } from "@shared/schema";
 
 export default function OrdersIndex() {
   const { data: orders = [], isLoading, error, refetch } = useOrders();
   const updateOrderStatus = useUpdateOrderStatus();
   const { toast } = useToast();
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [isPopoverOpen, setIsPopoverOpen] = useState(false);
+
+  const handleRowClick = (order: Order) => {
+    setSelectedOrder(order);
+    setIsPopoverOpen(true);
+  };
 
   const handleView = (order: Order) => {
-    toast({
-      title: "Order Details",
-      description: `Viewing details for ${order.orderNumber}`,
-    });
+    handleRowClick(order);
   };
 
   const handleEdit = (order: Order) => {
@@ -174,10 +179,18 @@ export default function OrdersIndex() {
             onView={handleView}
             onEdit={handleEdit}
             onUpdateStatus={handleUpdateStatus}
+            onRowClick={handleRowClick}
             isLoading={isLoading}
           />
         </CardContent>
       </Card>
+
+      {/* Order Details Popover */}
+      <OrderDetailsPopover
+        order={selectedOrder}
+        open={isPopoverOpen}
+        onOpenChange={setIsPopoverOpen}
+      />
     </div>
   );
 }
